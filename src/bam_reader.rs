@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use super::index::{self, Index};
 use super::record;
 use super::bgzip::{self, ReadBgzip};
+use super::bgzip::{Block, BlockError};
 use super::header::Header;
 use super::RecordReader;
 
@@ -554,6 +555,10 @@ impl<R: Read> BamReader<R> {
     /// Returns [header](../header/struct.Header.html).
     pub fn header(&self) -> &Header {
         &self.header
+    }
+
+    pub fn next(&mut self) -> std::result::Result<&Block, BlockError> { 
+        self.reader.next()
     }
 }
 

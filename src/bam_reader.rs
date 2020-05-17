@@ -545,9 +545,8 @@ impl<R: Read> BamReader<R> {
         Ok(Self { reader, header })
     }
 
-    pub fn from_stream_no_header(stream: R, additional_threads: u16) -> Result<Self> {
+    pub fn from_stream_no_header(stream: R, header: Header, additional_threads: u16) -> Result<Self> {
         let reader = bgzip::ConsecutiveReader::from_stream(stream, additional_threads);
-        let header = Header::new();
         Ok(Self { reader, header })
     }
 

@@ -166,7 +166,7 @@ impl Bin {
 
 impl Display for Bin {
     fn fmt(&self, f: &mut Formatter) -> result::Result<(), fmt::Error> {
-        write!(f, "Bin {}:  ", self.bin_id)?;
+        write!(f, "Bin {} as {:?}:  ", self.bin_id, bin_to_region(self.bin_id))?;
         for (i, chunk) in self.chunks.iter().enumerate() {
             write!(f, "{}{}", if i > 0 { ",  " } else { "" }, chunk)?;
         }
@@ -483,10 +483,10 @@ impl Iterator for BinsIter {
 impl std::iter::FusedIterator for BinsIter {}
 
 /// Maximal possible bin value.
-pub const MAX_BIN: u16 = 37448;
+pub const MAX_BIN: u32 = 37448;
 
 /// Returns a maximal region for a given bin.
-pub fn bin_to_region(bin: u16) -> (i32, i32) {
+pub fn bin_to_region(bin: u32) -> (i32, i32) {
     if bin == 0 {
         return (std::i32::MIN, std::i32::MAX);
     }
@@ -499,5 +499,6 @@ pub fn bin_to_region(bin: u16) -> (i32, i32) {
         }
         left = right;
     }
-    panic!("Bin id should be not bigger than MAX_BIN ({} > {})", bin, MAX_BIN);
+    return (std::i32::MIN, std::i32::MAX);
+    //panic!("Bin id should be not bigger than MAX_BIN ({} > {})", bin, MAX_BIN);
 }

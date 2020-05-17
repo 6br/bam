@@ -53,11 +53,11 @@ impl<'a, R: Read + Seek> RecordReader for RegionViewer<'a, R> {
                 continue;
             }
             let record_bin = record.calculate_bin();
-            if record_bin > index::MAX_BIN {
+            if record_bin as u32 > index::MAX_BIN {
                 record.clear();
                 return Err(Error::new(InvalidData, "Read has BAI bin bigger than max possible value"));
             }
-            let (min_start, max_end) = index::bin_to_region(record_bin);
+            let (min_start, max_end) = index::bin_to_region(record_bin.into());
             if min_start >= self.start && max_end <= self.end {
                 return Ok(true);
             }
@@ -544,6 +544,13 @@ impl<R: Read> BamReader<R> {
         let header = Header::from_bam(&mut reader)?;
         Ok(Self { reader, header })
     }
+
+    pub fn from_stream_no_header(stream: R, additional_threads: u16) -> Result<Self> {
+        let reader = bgzip::ConsecutiveReader::from_stream(stream, additional_threads);
+        let header = Header::new();
+        Ok(Self { reader, header })
+    }
+
 
     /// Returns [header](../header/struct.Header.html).
     pub fn header(&self) -> &Header {

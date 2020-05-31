@@ -7,22 +7,19 @@
 //! Use [ReadBgzip](trait.ReadBgzip.html) trait if you wish to read blocks directly
 //! (not via `io::Read`).
 
-use std::sync::{Arc, Weak, Mutex};
-use std::sync::atomic::{
-    AtomicBool,
-    Ordering::Relaxed,
-};
+use std::cmp::{max, min};
 use std::collections::VecDeque;
-use std::io::{self, Read, ErrorKind, Seek, SeekFrom};
+use std::fs::File;
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::{Arc, Mutex, Weak};
 use std::thread;
 use std::time::Duration;
-use std::path::Path;
-use std::fs::File;
-use std::cmp::{min, max};
 
-use crate::index::{Chunk, VirtualOffset};
 use super::{Block, BlockError, ObjectPool};
 use super::{SLEEP_TIME, TIMEOUT};
+use crate::index::{Chunk, VirtualOffset};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 struct WorkerId(u16);
@@ -72,14 +69,16 @@ impl Worker {
 
             let block = if let Ok(mut guard) = queue.lock() {
                 if let Some(block) = guard.blocks.pop_front() {
-                    guard.tasks.push_back(Task::NotReady(self.worker_id, TaskStatus::Waiting));
+                    guard
+                        .tasks
+                        .push_back(Task::NotReady(self.worker_id, TaskStatus::Waiting));
                     Some(block)
                 } else {
                     None
                 }
             } else {
                 // Panic in another thread
-                break
+                break;
             };
 
             let mut block = if let Some(value) = block {
@@ -93,8 +92,7 @@ impl Worker {
             if let Ok(mut guard) = queue.lock() {
                 for task in guard.tasks.iter_mut().rev() {
                     match task {
-                        Task::NotReady(worker_id, task_status)
-                                if *worker_id == self.worker_id => {
+                        Task::NotReady(worker_id, task_status) if *worker_id == self.worker_id => {
                             let new_value = if *task_status == TaskStatus::Waiting {
                                 Task::Ready(block, res)
                             } else {
@@ -102,14 +100,14 @@ impl Worker {
                             };
                             std::mem::replace(task, new_value);
                             continue 'outer;
-                        },
-                        _ => {},
+                        }
+                        _ => {}
                     }
                 }
                 panic!("Task handler not found for worker {}", self.worker_id.0);
             } else {
                 // Panic in another thread
-                break
+                break;
             };
         }
         self
@@ -127,10 +125,7 @@ struct ConsecutiveReadBlock<R: Read> {
 
 impl<R: Read> ConsecutiveReadBlock<R> {
     fn new(stream: R) -> Self {
-        Self {
-            stream,
-            offset: 0,
-        }
+        Self { stream, offset: 0 }
     }
 
     fn take_stream(self) -> R {
@@ -142,7 +137,9 @@ impl<R: Read> ReadBlock for ConsecutiveReadBlock<R> {
     fn read_next(&mut self, block: &mut Block) -> Result<(), BlockError> {
         block.reset();
         block.load(Some(self.offset), &mut self.stream)?;
-        self.offset += block.block_size().expect("Block size should be already defined") as u64;
+        self.offset += block
+            .block_size()
+            .expect("Block size should be already defined") as u64;
         Ok(())
     }
 }
@@ -159,7 +156,8 @@ impl<R: Read + Seek> JumpingReadBlock<R> {
     fn new(mut stream: R) -> io::Result<Self> {
         let offset = stream.seek(SeekFrom::Current(0))?;
         Ok(Self {
-            stream, offset,
+            stream,
+            offset,
             chunks: Vec::new(),
             index: 0,
             started: false,
@@ -171,11 +169,17 @@ impl<R: Read + Seek> JumpingReadBlock<R> {
         self.chunks.extend(chunks);
         for i in 1..self.chunks.len() {
             if self.chunks[i - 1].intersect(&self.chunks[i]) {
-                panic!("Cannot set chunks: chunk {:?} intersects chunk {:?}",
-                    self.chunks[i - 1], self.chunks[i]);
+                panic!(
+                    "Cannot set chunks: chunk {:?} intersects chunk {:?}",
+                    self.chunks[i - 1],
+                    self.chunks[i]
+                );
             } else if self.chunks[i - 1] >= self.chunks[i] {
-                panic!("Cannot set chunks: chunks are unordered: {:?} >= {:?}",
-                    self.chunks[i - 1], self.chunks[i]);
+                panic!(
+                    "Cannot set chunks: chunks are unordered: {:?} >= {:?}",
+                    self.chunks[i - 1],
+                    self.chunks[i]
+                );
             }
         }
         self.index = 0;
@@ -198,7 +202,10 @@ impl<R: Read + Seek> JumpingReadBlock<R> {
         if self.index >= self.chunks.len() {
             None
         } else {
-            Some(max(self.offset, self.chunks[self.index].start().block_offset()))
+            Some(max(
+                self.offset,
+                self.chunks[self.index].start().block_offset(),
+            ))
         }
     }
 
@@ -220,7 +227,9 @@ impl<R: Read + Seek> ReadBlock for JumpingReadBlock<R> {
             }
             block.reset();
             block.load(Some(self.offset), &mut self.stream)?;
-            self.offset += block.block_size().expect("Block size should be already defined") as u64;
+            self.offset += block
+                .block_size()
+                .expect("Block size should be already defined") as u64;
             Ok(())
         } else {
             Err(BlockError::EndOfStream)
@@ -287,17 +296,19 @@ impl MultiThread {
         assert!(threads > 0);
         let working_queue = Arc::new(Mutex::new(WorkingQueue::default()));
         let finish = Arc::new(AtomicBool::new(false));
-        let worker_handles = (0..threads).map(|i| {
-            let worker = Worker {
-                worker_id: WorkerId(i),
-                working_queue: Arc::downgrade(&working_queue),
-                finish: Arc::clone(&finish),
-            };
-            thread::Builder::new()
-                .name(format!("bgzip_read{}", i + 1))
-                .spawn(|| worker.run())
-                .expect("Cannot create a thread")
-        }).collect();
+        let worker_handles = (0..threads)
+            .map(|i| {
+                let worker = Worker {
+                    worker_id: WorkerId(i),
+                    working_queue: Arc::downgrade(&working_queue),
+                    finish: Arc::clone(&finish),
+                };
+                thread::Builder::new()
+                    .name(format!("bgzip_read{}", i + 1))
+                    .spawn(|| worker.run())
+                    .expect("Cannot create a thread")
+            })
+            .collect();
 
         Self {
             working_queue,
@@ -314,15 +325,20 @@ impl MultiThread {
         if !self.finish.load(Relaxed) {
             return;
         }
-        let workers = self.worker_handles.drain(..).map(|thread| thread.join())
+        let workers = self
+            .worker_handles
+            .drain(..)
+            .map(|thread| thread.join())
             .collect::<Result<Vec<Worker>, _>>()
             .unwrap_or_else(|e| panic!("Panic in one of the threads: {:?}", e));
         self.finish.store(false, Relaxed);
         for worker in workers {
-            self.worker_handles.push(thread::Builder::new()
-                .name(format!("bgzip_write{}", worker.worker_id.0 + 1))
-                .spawn(|| worker.run())
-                .expect("Cannot create a thread"));
+            self.worker_handles.push(
+                thread::Builder::new()
+                    .name(format!("bgzip_write{}", worker.worker_id.0 + 1))
+                    .spawn(|| worker.run())
+                    .expect("Cannot create a thread"),
+            );
         }
     }
 }
@@ -338,10 +354,14 @@ impl<T: ReadBlock> DecompressBlock<T> for MultiThread {
             0
         } else if let Ok(guard) = self.working_queue.lock() {
             let ready_tasks = guard.tasks.iter().filter(|task| task.is_ready()).count();
-            self.worker_handles.len().saturating_sub(std::cmp::max(guard.blocks.len(), ready_tasks))
+            self.worker_handles
+                .len()
+                .saturating_sub(std::cmp::max(guard.blocks.len(), ready_tasks))
         } else {
-            return Err(BlockError::IoError(io::Error::new(ErrorKind::Other,
-                "Panic in one of the threads")));
+            return Err(BlockError::IoError(io::Error::new(
+                ErrorKind::Other,
+                "Panic in one of the threads",
+            )));
         };
 
         for _ in 0..blocks_to_read {
@@ -351,19 +371,21 @@ impl<T: ReadBlock> DecompressBlock<T> for MultiThread {
                     self.reached_end = true;
                     self.blocks_pool.bring(block);
                     break;
-                },
+                }
                 Err(e) => {
                     self.blocks_pool.bring(block);
-                    return Err(e)
-                },
-                Ok(()) => {},
+                    return Err(e);
+                }
+                Ok(()) => {}
             }
             if let Ok(mut guard) = self.working_queue.lock() {
                 guard.blocks.push_back(block);
             } else {
                 self.blocks_pool.bring(block);
-                return Err(BlockError::IoError(io::Error::new(ErrorKind::Other,
-                    "Panic in one of the threads")));
+                return Err(BlockError::IoError(io::Error::new(
+                    ErrorKind::Other,
+                    "Panic in one of the threads",
+                )));
             }
         }
 
@@ -381,7 +403,7 @@ impl<T: ReadBlock> DecompressBlock<T> for MultiThread {
                         } else {
                             false
                         }
-                    },
+                    }
                 };
                 if need_pop {
                     match guard.tasks.pop_front() {
@@ -391,28 +413,33 @@ impl<T: ReadBlock> DecompressBlock<T> for MultiThread {
                     }
                 }
             } else {
-                return Err(BlockError::IoError(io::Error::new(ErrorKind::Other,
-                    "Panic in one of the threads")));
+                return Err(BlockError::IoError(io::Error::new(
+                    ErrorKind::Other,
+                    "Panic in one of the threads",
+                )));
             }
 
             thread::sleep(SLEEP_TIME);
             time_waited += SLEEP_TIME;
             if time_waited > TIMEOUT {
-                return Err(BlockError::IoError(io::Error::new(ErrorKind::TimedOut,
-                    format!("Decompression takes more than {:?}", TIMEOUT))));
+                return Err(BlockError::IoError(io::Error::new(
+                    ErrorKind::TimedOut,
+                    format!("Decompression takes more than {:?}", TIMEOUT),
+                )));
             }
         };
 
         match result {
             Ok(()) => {
-                self.blocks_pool.bring(std::mem::replace(&mut self.current_block, block));
+                self.blocks_pool
+                    .bring(std::mem::replace(&mut self.current_block, block));
                 self.was_error = false;
                 Ok(&self.current_block)
-            },
+            }
             Err(e) => {
                 self.blocks_pool.bring(block);
                 Err(e)
-            },
+            }
         }
     }
 
@@ -433,12 +460,13 @@ impl<T: ReadBlock> DecompressBlock<T> for MultiThread {
                 for _ in 0..guard.tasks.len() {
                     match guard.tasks.pop_front().unwrap() {
                         Task::Ready(block, _) => self.blocks_pool.bring(block),
-                        Task::NotReady(worker_id, _) => guard.tasks.push_back(
-                            Task::NotReady(worker_id, TaskStatus::Interrupted)),
+                        Task::NotReady(worker_id, _) => guard
+                            .tasks
+                            .push_back(Task::NotReady(worker_id, TaskStatus::Interrupted)),
                         Task::Interrupted(block) => self.blocks_pool.bring(block),
                     }
                 }
-            },
+            }
             Err(e) => panic!("Panic in one of the threads: {:?}", e),
         }
     }
@@ -512,7 +540,8 @@ impl<R: Read + Seek> SeekReader<R> {
             Box::new(MultiThread::new(additional_threads))
         };
         Ok(Self {
-            decompressor, reader,
+            decompressor,
+            reader,
             chunks_index: 0,
             started: false,
             contents_offset: 0,
@@ -539,14 +568,16 @@ impl<R: Read + Seek> SeekReader<R> {
     ///
     /// This function resets the current reading queue.
     pub fn make_consecutive(&mut self) {
-        self.reader.set_chunks(vec![Chunk::new(VirtualOffset::MIN, VirtualOffset::MAX)])
+        self.reader
+            .set_chunks(vec![Chunk::new(VirtualOffset::MIN, VirtualOffset::MAX)])
     }
 
     /// Sets the reader in a consecutive mode starting with `offset`, and continuing until the end of the stream.
     ///
     /// This function resets the current reading queue.
     pub fn from_offset(&mut self, offset: VirtualOffset) {
-        self.reader.set_chunks(vec![Chunk::new(offset, VirtualOffset::MAX)])
+        self.reader
+            .set_chunks(vec![Chunk::new(offset, VirtualOffset::MAX)])
     }
 
     /// Consumes the reader and returns inner stream.
@@ -566,8 +597,8 @@ impl<R: Read + Seek> ReadBgzip for SeekReader<R> {
         if block_offset >= chunks[self.chunks_index].end() {
             self.chunks_index += 1;
         }
-        self.contents_offset = max(block_offset, chunks[self.chunks_index].start())
-            .contents_offset() as usize;
+        self.contents_offset =
+            max(block_offset, chunks[self.chunks_index].start()).contents_offset() as usize;
         Ok(block)
     }
 
@@ -584,7 +615,7 @@ impl<R: Read + Seek> Read for SeekReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if !self.started {
             match self.next() {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(BlockError::EndOfStream) => return Ok(0),
                 Err(e) => return Err(e.into()),
             }
@@ -595,7 +626,9 @@ impl<R: Read + Seek> Read for SeekReader<R> {
                 None => return Ok(0),
             };
 
-            let block_offset = block.offset().expect("Block size should be already defined");
+            let block_offset = block
+                .offset()
+                .expect("Block size should be already defined");
             let end_offset = self.reader.chunks()[self.chunks_index].end();
             let contents_end = if block_offset < end_offset.block_offset() {
                 block.uncompressed_size() as usize
@@ -605,11 +638,13 @@ impl<R: Read + Seek> Read for SeekReader<R> {
             };
             if self.contents_offset < contents_end {
                 let read_bytes = min(contents_end - self.contents_offset, buf.len());
-                buf[..read_bytes].copy_from_slice(&block.uncompressed_data()
-                    [self.contents_offset..self.contents_offset + read_bytes]);
+                buf[..read_bytes].copy_from_slice(
+                    &block.uncompressed_data()
+                        [self.contents_offset..self.contents_offset + read_bytes],
+                );
                 std::mem::drop(block);
                 self.contents_offset += read_bytes;
-                return Ok(read_bytes)
+                return Ok(read_bytes);
             }
             std::mem::drop(block);
 
@@ -624,7 +659,7 @@ impl<R: Read + Seek> Read for SeekReader<R> {
 
             if read_next {
                 match self.next() {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(BlockError::EndOfStream) => return Ok(0),
                     Err(e) => return Err(e.into()),
                 }
@@ -669,7 +704,8 @@ impl<R: Read> ConsecutiveReader<R> {
             Box::new(MultiThread::new(additional_threads))
         };
         Self {
-            decompressor, reader,
+            decompressor,
+            reader,
             contents_offset: 0,
             started: false,
         }
@@ -678,6 +714,10 @@ impl<R: Read> ConsecutiveReader<R> {
     /// Consumes the reader and returns inner stream.
     pub fn take_stream(self) -> R {
         self.reader.take_stream()
+    }
+
+    pub fn contents_offset(&self) -> usize {
+        self.contents_offset
     }
 }
 
@@ -701,7 +741,7 @@ impl<R: Read> Read for ConsecutiveReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if !self.started {
             match self.next() {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(BlockError::EndOfStream) => return Ok(0),
                 Err(e) => return Err(e.into()),
             }
@@ -711,17 +751,21 @@ impl<R: Read> Read for ConsecutiveReader<R> {
                 None => return Ok(0),
             };
 
-            let read_bytes = min(block.uncompressed_size() as usize - self.contents_offset,
-                buf.len());
+            let read_bytes = min(
+                block.uncompressed_size() as usize - self.contents_offset,
+                buf.len(),
+            );
             if read_bytes > 0 {
-                buf[..read_bytes].copy_from_slice(&block.uncompressed_data()
-                    [self.contents_offset..self.contents_offset + read_bytes]);
+                buf[..read_bytes].copy_from_slice(
+                    &block.uncompressed_data()
+                        [self.contents_offset..self.contents_offset + read_bytes],
+                );
                 std::mem::drop(block);
                 self.contents_offset += read_bytes;
-                return Ok(read_bytes)
+                return Ok(read_bytes);
             }
             match self.next() {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(BlockError::EndOfStream) => return Ok(0),
                 Err(e) => return Err(e.into()),
             }

@@ -11,6 +11,7 @@ use super::bgzip::{self, ReadBgzip};
 use super::bgzip::{Block, BlockError};
 use super::header::Header;
 use super::RecordReader;
+use index::Chunk;
 
 /// Iterator over records in a specific region.
 /// Implements [RecordReader](../trait.RecordReader.html) trait.
@@ -441,6 +442,26 @@ impl<R: Read + Seek> IndexedReader<R> {
         }
     }
 
+    /// Returns an iterator over all records from the start of the BAM file.
+    pub fn chunk<'a>(&'a mut self, chunks: Vec<Chunk>) -> RegionViewer<'a, R> {
+        self.chunk_by(chunks, |_| true)
+    }
+
+    /// Returns an iterator over all records from the start of the BAM file.
+    ///
+    /// Records will be filtered by `predicate`, which allows to skip some records without allocating new memory.
+    pub fn chunk_by<'a, F>(&'a mut self, chunks: Vec<Chunk>, predicate: F) -> RegionViewer<'a, R>
+    where F: 'static + Fn(&record::Record) -> bool
+    {
+        self.reader.set_chunks(chunks);
+        RegionViewer {
+            parent: self,
+            start: std::i32::MIN,
+            end: std::i32::MAX,
+            predicate: Box::new(predicate),
+        }
+    }
+
     /// Returns an iterator over unmapped records at the end of the BAM file.
     pub fn unmapped<'a>(&'a mut self) -> RegionViewer<'a, R> {
         self.unmapped_by(|_| true)
@@ -519,7 +540,7 @@ impl<R: Read + Seek> IndexedReader<R> {
 /// }
 /// ```
 pub struct BamReader<R: Read> {
-    reader: bgzip::ConsecutiveReader<R>,
+    pub reader: bgzip::ConsecutiveReader<R>,
     header: Header,
 }
 

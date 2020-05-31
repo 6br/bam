@@ -584,6 +584,10 @@ impl<R: Read + Seek> SeekReader<R> {
     pub fn take_stream(self) -> R {
         self.reader.take_stream()
     }
+
+    pub fn contents_offset(&self) -> usize {
+        self.contents_offset
+    }
 }
 
 impl<R: Read + Seek> ReadBgzip for SeekReader<R> {

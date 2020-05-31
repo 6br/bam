@@ -77,18 +77,19 @@ impl Sequence {
     }
 
     /// Extends sequence from the text representation.
-    pub fn extend_from_text<I: IntoIterator<Item = u8>>(&mut self, nucleotides: I)
-            -> Result<(), String> {
+    pub fn extend_from_text<I: IntoIterator<Item = u8>>(
+        &mut self,
+        nucleotides: I,
+    ) -> Result<(), String> {
         for nt in nucleotides.into_iter() {
             self.push(nt)?;
-        };
+        }
         Ok(())
     }
 
     /// Clears sequence and fills from a raw stream. `new_len` represents the number of nucleotides,
     /// not the number of bytes.
-    pub fn fill_from<R: Read>(&mut self, stream: &mut R, new_len: usize)
-            -> io::Result<()> {
+    pub fn fill_from<R: Read>(&mut self, stream: &mut R, new_len: usize) -> io::Result<()> {
         let short_len = (new_len + 1) / 2;
         unsafe {
             resize(&mut self.raw, short_len);
@@ -126,7 +127,12 @@ impl Sequence {
 
     /// Returns a nucleotide at the position `index`, represented by a single byte, O(1).
     pub fn at(&self, index: usize) -> u8 {
-        assert!(index < self.len, "Index out of range ({} >= {})", index, self.len);
+        assert!(
+            index < self.len,
+            "Index out of range ({} >= {})",
+            index,
+            self.len
+        );
         let nt = if index % 2 == 0 {
             self.raw[index / 2] >> 4
         } else {
@@ -138,7 +144,12 @@ impl Sequence {
     /// Returns a nucleotide at the position `index`, represented by a single byte, O(1).
     /// If the nucleotide is not A, C, G or T, the function returns N.
     pub fn at_acgtn_only(&self, index: usize) -> u8 {
-        assert!(index < self.len, "Index out of range ({} >= {})", index, self.len);
+        assert!(
+            index < self.len,
+            "Index out of range ({} >= {})",
+            index,
+            self.len
+        );
         let nt = if index % 2 == 0 {
             self.raw[index / 2] >> 4
         } else {
@@ -149,7 +160,12 @@ impl Sequence {
 
     /// Returns a nucleotide, complement to the nucleotide at the position `index`, O(1).
     pub fn compl_at(&self, index: usize) -> u8 {
-        assert!(index < self.len, "Index out of range ({} >= {})", index, self.len);
+        assert!(
+            index < self.len,
+            "Index out of range ({} >= {})",
+            index,
+            self.len
+        );
         let nt = if index % 2 == 0 {
             self.raw[index / 2] >> 4
         } else {
@@ -161,7 +177,12 @@ impl Sequence {
     /// Returns a nucleotide, complement to the nucleotide at the position `index`, O(1).
     /// If the nucleotide is not A, C, G or T, the function returns N.
     pub fn compl_at_acgtn_only(&self, index: usize) -> u8 {
-        assert!(index < self.len, "Index out of range ({} >= {})", index, self.len);
+        assert!(
+            index < self.len,
+            "Index out of range ({} >= {})",
+            index,
+            self.len
+        );
         let nt = if index % 2 == 0 {
             self.raw[index / 2] >> 4
         } else {
@@ -294,26 +315,28 @@ macro_rules! subseq_iter {
         impl<'a> std::iter::ExactSizeIterator for $name<'a> {}
 
         impl<'a> std::iter::FusedIterator for $name<'a> {}
-    }
+    };
 }
 
 subseq_iter!(SubseqIter, Range<usize>, at);
 subseq_iter!(SubseqIterAcgtn, Range<usize>, at_acgtn_only);
 subseq_iter!(RevComplIter, std::iter::Rev<Range<usize>>, compl_at);
-subseq_iter!(RevComplIterAcgtn, std::iter::Rev<Range<usize>>, compl_at_acgtn_only);
+subseq_iter!(
+    RevComplIterAcgtn,
+    std::iter::Rev<Range<usize>>,
+    compl_at_acgtn_only
+);
 
 /// Wrapper around qualities.
 #[derive(Clone)]
 pub struct Qualities {
-    raw: Vec<u8>
+    raw: Vec<u8>,
 }
 
 impl Qualities {
     /// Creates a new instance of `Qualities`.
     pub fn new() -> Self {
-        Qualities {
-            raw: Vec::new()
-        }
+        Qualities { raw: Vec::new() }
     }
 
     pub fn from_raw<I: IntoIterator<Item = u8>>(raw: I) -> Self {

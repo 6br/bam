@@ -1,7 +1,7 @@
 //! Cigar and operations on it.
 
-use std::io::{self, Write};
 use std::fmt::{self, Display, Formatter};
+use std::io::{self, Write};
 use std::slice::Iter;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -68,7 +68,7 @@ impl Operation {
             | Operation::Soft
             | Operation::SeqMatch
             | Operation::SeqMismatch => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -81,7 +81,7 @@ impl Operation {
             | Operation::Skip
             | Operation::SeqMatch
             | Operation::SeqMismatch => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -205,8 +205,11 @@ impl Cigar {
         Ok(())
     }
 
-    pub(crate) fn fill_from<R: ReadBytesExt>(&mut self, stream: &mut R, len: usize)
-            -> io::Result<()> {
+    pub(crate) fn fill_from<R: ReadBytesExt>(
+        &mut self,
+        stream: &mut R,
+        len: usize,
+    ) -> io::Result<()> {
         unsafe {
             super::resize(&mut self.0, len);
         }
@@ -249,20 +252,26 @@ impl Cigar {
     /// [Record::calculate_end](../struct.Record.html#method.calculate_end), as the
     /// record alignment end is stored once calculated.
     pub fn calculate_ref_len(&self) -> u32 {
-        self.0.iter().map(|value| match value & 0xf {
-            0 | 2 | 3 | 7 | 8 => value >> 4,
-            1 | 4 | 5 | 6 => 0,
-            _ => panic!("Unexpected Cigar operation: {}", value & 0xf),
-        }).sum::<u32>()
+        self.0
+            .iter()
+            .map(|value| match value & 0xf {
+                0 | 2 | 3 | 7 | 8 => value >> 4,
+                1 | 4 | 5 | 6 => 0,
+                _ => panic!("Unexpected Cigar operation: {}", value & 0xf),
+            })
+            .sum::<u32>()
     }
 
     /// Calculates query length.
     pub fn calculate_query_len(&self) -> u32 {
-        self.0.iter().map(|value| match value & 0xf {
-            0 | 1 | 4 | 7 | 8 => value >> 4,
-            2 | 3 | 5 | 6 => 0,
-            _ => panic!("Unexpected Cigar operation: {}", value & 0xf),
-        }).sum::<u32>()
+        self.0
+            .iter()
+            .map(|value| match value & 0xf {
+                0 | 1 | 4 | 7 | 8 => value >> 4,
+                2 | 3 | 5 | 6 => 0,
+                _ => panic!("Unexpected Cigar operation: {}", value & 0xf),
+            })
+            .sum::<u32>()
     }
 
     /// Shrinks inner vector.
@@ -309,11 +318,16 @@ impl Cigar {
     /// on the left side if `left_side` and on the right side otherwise.
     pub fn hard_clipping(&self, left_side: bool) -> u32 {
         if left_side {
-            self.iter().take_while(|(_len, op)| !op.consumes_ref() && !op.consumes_query())
-                .map(|(len, _op)| len).sum()
+            self.iter()
+                .take_while(|(_len, op)| !op.consumes_ref() && !op.consumes_query())
+                .map(|(len, _op)| len)
+                .sum()
         } else {
-            self.iter().rev().take_while(|(_len, op)| !op.consumes_ref() && !op.consumes_query())
-                .map(|(len, _op)| len).sum()
+            self.iter()
+                .rev()
+                .take_while(|(_len, op)| !op.consumes_ref() && !op.consumes_query())
+                .map(|(len, _op)| len)
+                .sum()
         }
     }
 
@@ -329,7 +343,7 @@ impl Cigar {
         let mut res = 0;
         for (len, op) in iter {
             match op.class() {
-                Class::Hard => {},
+                Class::Hard => {}
                 Class::Insertion => res += len,
                 _ => break,
             }
@@ -421,7 +435,7 @@ impl<'a> Iterator for AlignedPairs<'a> {
     }
 }
 
-impl<'a> std::iter::FusedIterator for AlignedPairs<'a> { }
+impl<'a> std::iter::FusedIterator for AlignedPairs<'a> {}
 
 /// Iterator over pairs `(u32, u32)`.
 /// The first element represents a sequence index, and the second element represents a
@@ -448,7 +462,7 @@ impl<'a> Iterator for MatchingPairs<'a> {
                 AlnMatch | SeqMatch | SeqMismatch => self.remaining_len = v >> 4,
                 Insertion | Soft => self.q_pos += op_len,
                 Deletion | Skip => self.r_pos += op_len,
-                _ => {},
+                _ => {}
             }
         }
 
@@ -459,7 +473,7 @@ impl<'a> Iterator for MatchingPairs<'a> {
     }
 }
 
-impl<'a> std::iter::FusedIterator for MatchingPairs<'a> { }
+impl<'a> std::iter::FusedIterator for MatchingPairs<'a> {}
 
 impl Display for Cigar {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {

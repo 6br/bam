@@ -1,23 +1,23 @@
 //! SAM/BAM record, sequence, qualities and operations on them.
 
-use std::io::{self, Read, Write};
-use std::io::ErrorKind::{self, InvalidData, UnexpectedEof};
 use std::cell::Cell;
-use std::str::from_utf8;
 use std::fmt;
+use std::io::ErrorKind::{self, InvalidData, UnexpectedEof};
+use std::io::{self, Read, Write};
+use std::str::from_utf8;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
-pub mod tags;
 pub mod cigar;
 pub mod sequence;
+pub mod tags;
 
 use super::header::Header;
 use super::index;
 
 pub use cigar::Cigar;
-pub use sequence::Sequence;
 pub use sequence::Qualities;
+pub use sequence::Sequence;
 
 /// `= 0x1`. Record has a mate.
 pub const RECORD_PAIRED: u16 = 0x1;
@@ -252,8 +252,9 @@ pub(crate) unsafe fn resize<T>(v: &mut Vec<T>, new_len: usize) {
 }
 
 pub(crate) fn write_iterator<W, I>(writer: &mut W, mut iterator: I) -> io::Result<()>
-where W: Write,
-      I: Iterator<Item = u8>,
+where
+    W: Write,
+    I: Iterator<Item = u8>,
 {
     const SIZE: usize = 1024;
     let mut buffer = [0_u8; SIZE];
@@ -277,8 +278,12 @@ trait NextToErr<'a> {
 
 impl<'a> NextToErr<'a> for std::str::Split<'a, char> {
     fn try_next(&mut self, field: &'static str) -> io::Result<&'a str> {
-        self.next().ok_or_else(|| io::Error::new(UnexpectedEof,
-            format!("Truncated file: Cannot extract field {}", field)))
+        self.next().ok_or_else(|| {
+            io::Error::new(
+                UnexpectedEof,
+                format!("Truncated file: Cannot extract field {}", field),
+            )
+        })
     }
 }
 
@@ -359,9 +364,14 @@ impl Record {
 
     fn corrupt(&mut self, text: &str) -> io::Error {
         if self.name.is_empty() {
-            io::Error::new(InvalidData,
-                format!("Corrupted record {}: {}",
-                    std::str::from_utf8(&self.name).unwrap_or("*NAME NOT UTF-8*"), text))
+            io::Error::new(
+                InvalidData,
+                format!(
+                    "Corrupted record {}: {}",
+                    std::str::from_utf8(&self.name).unwrap_or("*NAME NOT UTF-8*"),
+                    text
+                ),
+            )
         } else {
             io::Error::new(InvalidData, format!("Corrupted record: {}", text))
         }
@@ -377,16 +387,16 @@ impl Record {
                     return Err(self.corrupt("Negative block size"));
                 }
                 value as usize
-            },
+            }
             Err(e) => {
                 if e.kind() == ErrorKind::UnexpectedEof {
                     return Ok(false);
                 } else {
                     return Err(e);
                 }
-            },
+            }
         };
-        
+
         let ref_id = stream.read_i32::<LittleEndian>()?;
         if ref_id < -1 {
             return Err(self.corrupt("Reference id < 1"));
@@ -442,8 +452,8 @@ impl Record {
         self.qual.fill_from(stream, qual_len)?;
 
         let seq_len = (qual_len + 1) / 2;
-        let remaining_size = block_size - 32 - name_len as usize - 4 * cigar_len as usize
-            - seq_len - qual_len;
+        let remaining_size =
+            block_size - 32 - name_len as usize - 4 * cigar_len as usize - seq_len - qual_len;
         self.tags.fill_from(stream, remaining_size)?;
         self.replace_cigar_if_needed()?;
         Ok(true)
@@ -454,7 +464,8 @@ impl Record {
         let mut split = line.split('\t');
         self.set_name(split.try_next("record name (QNAME)")?.bytes());
         let flag = split.try_next("flag")?;
-        let flag = flag.parse()
+        let flag = flag
+            .parse()
             .map_err(|_| self.corrupt(&format!("Cannot convert flag '{}' to int", flag)))?;
         self.set_flag(flag);
 
@@ -462,21 +473,25 @@ impl Record {
         if rname == "*" {
             self.set_ref_id(-1);
         } else {
-            let r_id = header.reference_id(rname).ok_or_else(||
-                self.corrupt(&format!("Reference '{}' is not in the header", rname)))?;
+            let r_id = header.reference_id(rname).ok_or_else(|| {
+                self.corrupt(&format!("Reference '{}' is not in the header", rname))
+            })?;
             self.set_ref_id(r_id as i32);
         }
 
         let start = split.try_next("start (POS)")?;
-        let start = start.parse::<i32>()
-            .map_err(|_| self.corrupt(&format!("Cannot convert POS '{}' to int", start)))? - 1;
+        let start = start
+            .parse::<i32>()
+            .map_err(|_| self.corrupt(&format!("Cannot convert POS '{}' to int", start)))?
+            - 1;
         if start < -1 {
             return Err(self.corrupt("Start < -1"));
         }
         self.set_start(start);
 
         let mapq = split.try_next("mapq")?;
-        let mapq = mapq.parse()
+        let mapq = mapq
+            .parse()
             .map_err(|_| self.corrupt(&format!("Cannot convert MAPQ '{}' to int", mapq)))?;
         self.set_mapq(mapq);
 
@@ -484,7 +499,8 @@ impl Record {
         if cigar == "*" {
             self.set_raw_cigar(std::iter::empty());
         } else {
-            self.set_cigar(cigar.bytes()).map_err(|e| self.corrupt(&e))?;
+            self.set_cigar(cigar.bytes())
+                .map_err(|e| self.corrupt(&e))?;
         }
         if self.flag().is_mapped() && self.cigar.len() == 0 {
             return Err(self.corrupt("Mapped read has an empty CIGAR"));
@@ -496,32 +512,39 @@ impl Record {
         } else if rnext == "=" {
             self.set_mate_ref_id(self.ref_id);
         } else {
-            let nr_id = header.reference_id(rnext).ok_or_else(||
-                self.corrupt(&format!("Reference '{}' is not in the header", rnext)))?;
+            let nr_id = header.reference_id(rnext).ok_or_else(|| {
+                self.corrupt(&format!("Reference '{}' is not in the header", rnext))
+            })?;
             self.set_mate_ref_id(nr_id as i32);
         }
 
         let mate_start = split.try_next("mate start (PNEXT)")?;
-        let mate_start = mate_start.parse::<i32>().map_err(|_|
-            self.corrupt(&format!("Cannot convert PNEXT '{}' to int", mate_start)))? - 1;
+        let mate_start = mate_start
+            .parse::<i32>()
+            .map_err(|_| self.corrupt(&format!("Cannot convert PNEXT '{}' to int", mate_start)))?
+            - 1;
         if mate_start < -1 {
             return Err(self.corrupt("Mate start < -1"));
         }
         self.set_mate_start(mate_start);
 
         let template_len = split.try_next("template length (TLEN)")?;
-        let template_len = template_len.parse::<i32>().map_err(|_|
-            self.corrupt(&format!("Cannot convert TLEN '{}' to int", template_len)))?;
+        let template_len = template_len
+            .parse::<i32>()
+            .map_err(|_| self.corrupt(&format!("Cannot convert TLEN '{}' to int", template_len)))?;
         self.set_template_len(template_len);
 
         let seq = split.try_next("sequence")?;
         let qual = split.try_next("qualities")?;
         if seq == "*" {
-            self.set_seq_qual(std::iter::empty(), std::iter::empty()).map_err(|e| self.corrupt(&e))?;
+            self.set_seq_qual(std::iter::empty(), std::iter::empty())
+                .map_err(|e| self.corrupt(&e))?;
         } else if qual == "*" {
-            self.set_seq_qual(seq.bytes(), std::iter::empty()).map_err(|e| self.corrupt(&e))?;
+            self.set_seq_qual(seq.bytes(), std::iter::empty())
+                .map_err(|e| self.corrupt(&e))?;
         } else {
-            self.set_seq_qual(seq.bytes(), qual.bytes().map(|q| q - 33)).map_err(|e| self.corrupt(&e))?;
+            self.set_seq_qual(seq.bytes(), qual.bytes().map(|q| q - 33))
+                .map_err(|e| self.corrupt(&e))?;
         }
 
         self.tags.clear();
@@ -533,8 +556,9 @@ impl Record {
 
     /// Replace Cigar by CG tag if Cigar has placeholder *kSmN*.
     fn replace_cigar_if_needed(&mut self) -> io::Result<()> {
-        if !self.cigar.is_empty() && self.cigar.at(0) ==
-                (self.seq.len() as u32, cigar::Operation::Soft) {
+        if !self.cigar.is_empty()
+            && self.cigar.at(0) == (self.seq.len() as u32, cigar::Operation::Soft)
+        {
             if self.cigar.len() != 2 {
                 return Err(self.corrupt("Record contains invalid Cigar"));
             }
@@ -550,12 +574,12 @@ impl Record {
                         return Err(self.corrupt("CG tag has an incorrect type"));
                     }
                     array_view
-                },
-                _ => return Err(
-                    self.corrupt("Record should contain tag CG, but does not")),
+                }
+                _ => return Err(self.corrupt("Record should contain tag CG, but does not")),
             };
             self.cigar.clear();
-            self.cigar.extend_from_raw(cigar_arr.iter().map(|el| el as u32));
+            self.cigar
+                .extend_from_raw(cigar_arr.iter().map(|el| el as u32));
             std::mem::drop(cigar_arr);
             self.tags.remove(b"CG");
         }
@@ -713,8 +737,16 @@ impl Record {
         if self.ref_id < 0 {
             f.write_all(b"*\t")?;
         } else {
-            write!(f, "{}\t", header.reference_name(self.ref_id as u32)
-                .ok_or_else(|| io::Error::new(InvalidData, "Record has a reference id not in the header"))?)?;
+            write!(
+                f,
+                "{}\t",
+                header
+                    .reference_name(self.ref_id as u32)
+                    .ok_or_else(|| io::Error::new(
+                        InvalidData,
+                        "Record has a reference id not in the header"
+                    ))?
+            )?;
         }
         write!(f, "{}\t{}\t", self.start + 1, self.mapq)?;
         self.cigar.write_readable(f)?;
@@ -724,8 +756,16 @@ impl Record {
         } else if self.mate_ref_id == self.ref_id {
             f.write_all(b"\t=\t")?;
         } else {
-            write!(f, "\t{}\t", header.reference_name(self.mate_ref_id as u32)
-                .ok_or_else(|| io::Error::new(InvalidData, "Record has a reference id not in the header"))?)?;
+            write!(
+                f,
+                "\t{}\t",
+                header
+                    .reference_name(self.mate_ref_id as u32)
+                    .ok_or_else(|| io::Error::new(
+                        InvalidData,
+                        "Record has a reference id not in the header"
+                    ))?
+            )?;
         }
         write!(f, "{}\t{}\t", self.mate_start + 1, self.template_len)?;
         self.seq.write_readable(f)?;
@@ -742,8 +782,13 @@ impl Record {
         } else {
             16 + 4 * self.cigar.len()
         };
-        let total_block_len = 32 + self.name.len() + 1 + raw_cigar_len
-            + self.seq.raw().len() + self.seq.len() + self.tags.raw().len();
+        let total_block_len = 32
+            + self.name.len()
+            + 1
+            + raw_cigar_len
+            + self.seq.raw().len()
+            + self.seq.len()
+            + self.tags.raw().len();
         stream.write_i32::<LittleEndian>(total_block_len as i32)?;
 
         stream.write_i32::<LittleEndian>(self.ref_id)?;
@@ -763,7 +808,7 @@ impl Record {
         stream.write_i32::<LittleEndian>(self.mate_ref_id)?;
         stream.write_i32::<LittleEndian>(self.mate_start)?;
         stream.write_i32::<LittleEndian>(self.template_len)?;
-        
+
         stream.write_all(&self.name)?;
         stream.write_u8(0)?;
         if self.cigar.len() <= 0xffff {
@@ -877,8 +922,9 @@ impl Record {
     ///
     /// If the function returns an error, the sequence and qualities are cleared.
     pub fn set_seq_qual<T, U>(&mut self, sequence: T, qualities: U) -> Result<(), String>
-    where T: IntoIterator<Item = u8>,
-          U: IntoIterator<Item = u8>,
+    where
+        T: IntoIterator<Item = u8>,
+        U: IntoIterator<Item = u8>,
     {
         self.seq.clear();
         if let Err(e) = self.seq.extend_from_text(sequence) {
@@ -889,8 +935,12 @@ impl Record {
         self.qual.clear();
         self.qual.extend_from_raw(qualities);
         if self.qual.available() && self.seq.len() != self.qual.len() {
-            let err = Err(format!("Trying to set sequence and qualities of different lengths: \
-                {} and {}", self.seq.len(), self.qual.len()));
+            let err = Err(format!(
+                "Trying to set sequence and qualities of different lengths: \
+                {} and {}",
+                self.seq.len(),
+                self.qual.len()
+            ));
             self.seq.clear();
             self.qual.clear();
             err
@@ -909,23 +959,35 @@ impl Record {
     /// number of bytes.
     ///
     /// If the function returns an error, the sequence and qualities are cleared.
-    pub fn set_raw_seq_qual<U>(&mut self, raw_seq: &[u8], qualities: U, len: usize)
-        -> Result<(), String>
-    where U: IntoIterator<Item = u8>,
+    pub fn set_raw_seq_qual<U>(
+        &mut self,
+        raw_seq: &[u8],
+        qualities: U,
+        len: usize,
+    ) -> Result<(), String>
+    where
+        U: IntoIterator<Item = u8>,
     {
         self.seq.clear();
         self.qual.clear();
         self.qual.extend_from_raw(qualities);
         if self.qual.available() && self.qual.len() != len {
             self.qual.clear();
-            return Err(format!("Expected qualities length: {}, got {}", len, self.qual.len()));
+            return Err(format!(
+                "Expected qualities length: {}, got {}",
+                len,
+                self.qual.len()
+            ));
         }
 
         if (len + 1) / 2 != raw_seq.len() {
             self.seq.clear();
             self.qual.clear();
-            return Err(format!("Expected raw sequence length: {}, got {}",
-                (len + 1) / 2, raw_seq.len()));
+            return Err(format!(
+                "Expected raw sequence length: {}, got {}",
+                (len + 1) / 2,
+                raw_seq.len()
+            ));
         }
 
         let mut slice = &raw_seq[..];
@@ -1011,9 +1073,15 @@ impl Record {
 
 impl fmt::Debug for Record {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{} (len {}) aligned to [{}]:{}-{}",
-            std::str::from_utf8(&self.name).unwrap_or("*NAME NOT UTF-8*"), self.query_len(),
-            self.ref_id(), self.start() + 1, self.calculate_end())
+        write!(
+            f,
+            "{} (len {}) aligned to [{}]:{}-{}",
+            std::str::from_utf8(&self.name).unwrap_or("*NAME NOT UTF-8*"),
+            self.query_len(),
+            self.ref_id(),
+            self.start() + 1,
+            self.calculate_end()
+        )
     }
 }
 
@@ -1165,10 +1233,13 @@ impl<'a> EntriesIter<'a> {
                     from_utf8(self.parent.name()).unwrap_or("*NAME NON UTF-8*"),
                     from_utf8(self.md_tag).unwrap_or("*MD TAG NON UTF-8*"));
             } else {
-                assert!(curr_char.is_ascii_uppercase(),
+                assert!(
+                    curr_char.is_ascii_uppercase(),
                     "Record {}: Failed to parse MD tag: {}. Unexpected MD char: {}",
                     from_utf8(self.parent.name()).unwrap_or("*NAME NON UTF-8*"),
-                    from_utf8(self.md_tag).unwrap_or("*MD TAG NON UTF-8*"), curr_char as char);
+                    from_utf8(self.md_tag).unwrap_or("*MD TAG NON UTF-8*"),
+                    curr_char as char
+                );
                 return curr_char;
             }
         }
@@ -1180,9 +1251,11 @@ impl<'a> EntriesIter<'a> {
                 from_utf8(self.parent.name()).unwrap_or("*NAME NON UTF-8*"),
                 from_utf8(self.md_tag).unwrap_or("*MD TAG NON UTF-8*")));
         }
-        panic!("Record {}: Failed to parse MD tag: {}. Reached the end of MD tag",
+        panic!(
+            "Record {}: Failed to parse MD tag: {}. Reached the end of MD tag",
             from_utf8(self.parent.name()).unwrap_or("*NAME NON UTF-8*"),
-            from_utf8(self.md_tag).unwrap_or("*MD TAG NON UTF-8*"));
+            from_utf8(self.md_tag).unwrap_or("*MD TAG NON UTF-8*")
+        );
     }
 }
 
@@ -1195,24 +1268,31 @@ impl<'a> Iterator for EntriesIter<'a> {
             (Some(record_pos), Some(ref_pos)) => {
                 let record_nt = self.parent.sequence().at(record_pos as usize);
                 let ref_nt = self.curr_ref_nt(Some(record_nt));
-                return Some(AlignmentEntry { record_pos, record_nt, ref_pos, ref_nt });
-            },
+                return Some(AlignmentEntry {
+                    record_pos,
+                    record_nt,
+                    ref_pos,
+                    ref_nt,
+                });
+            }
             (Some(record_pos), None) => {
                 let record_nt = self.parent.sequence().at(record_pos as usize);
                 return Some(AlignmentEntry {
-                    record_pos, record_nt,
+                    record_pos,
+                    record_nt,
                     ref_pos: MISSING,
                     ref_nt: 0,
                 });
-            },
+            }
             (None, Some(ref_pos)) => {
                 let ref_nt = self.curr_ref_nt(None);
                 return Some(AlignmentEntry {
-                    ref_pos, ref_nt,
+                    ref_pos,
+                    ref_nt,
                     record_pos: MISSING,
                     record_nt: 0,
                 });
-            },
+            }
             (None, None) => unreachable!(),
         }
     }

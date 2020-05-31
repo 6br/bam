@@ -1,7 +1,7 @@
 //! Record tags and operations on them.
 
-use std::io::{self, Read, Write};
 use std::io::ErrorKind::InvalidData;
+use std::io::{self, Read, Write};
 use std::mem;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -63,20 +63,29 @@ impl IntegerType {
         match self {
             I8 => unsafe { mem::transmute::<u8, i8>(raw_tag[0]) as i64 },
             U8 => raw_tag[0] as i64,
-            I16 => raw_tag.read_i16::<LittleEndian>()
-                .expect("Failed to extract tag from a raw representation.") as i64,
-            U16 => raw_tag.read_u16::<LittleEndian>()
-                .expect("Failed to extract tag from a raw representation.") as i64,
-            I32 => raw_tag.read_i32::<LittleEndian>()
-                .expect("Failed to extract tag from a raw representation.") as i64,
-            U32 => raw_tag.read_u32::<LittleEndian>()
-                .expect("Failed to extract tag from a raw representation.") as i64,
+            I16 => raw_tag
+                .read_i16::<LittleEndian>()
+                .expect("Failed to extract tag from a raw representation.")
+                as i64,
+            U16 => raw_tag
+                .read_u16::<LittleEndian>()
+                .expect("Failed to extract tag from a raw representation.")
+                as i64,
+            I32 => raw_tag
+                .read_i32::<LittleEndian>()
+                .expect("Failed to extract tag from a raw representation.")
+                as i64,
+            U32 => raw_tag
+                .read_u32::<LittleEndian>()
+                .expect("Failed to extract tag from a raw representation.")
+                as i64,
         }
     }
 }
 
 fn parse_float(mut raw_tag: &[u8]) -> f32 {
-    raw_tag.read_f32::<LittleEndian>()
+    raw_tag
+        .read_f32::<LittleEndian>()
         .expect("Failed to extract tag from a raw representation.")
 }
 
@@ -126,7 +135,12 @@ impl<'a> IntArrayView<'a> {
     pub fn at(&self, index: usize) -> i64 {
         let start = self.int_type.size_of() * index;
         let end = start + self.int_type.size_of();
-        assert!(end <= self.raw.len(), "Index out of bounds: index {}, len {}", index, self.len());
+        assert!(
+            end <= self.raw.len(),
+            "Index out of bounds: index {}, len {}",
+            index,
+            self.len()
+        );
         self.int_type.parse_raw(&self.raw[start..end])
     }
 
@@ -156,7 +170,9 @@ impl<'a> Iterator for IntArrayViewIter<'a> {
     type Item = i64;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.chunks.next().map(|chunk| self.int_type.parse_raw(chunk))
+        self.chunks
+            .next()
+            .map(|chunk| self.int_type.parse_raw(chunk))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -166,7 +182,9 @@ impl<'a> Iterator for IntArrayViewIter<'a> {
 
 impl<'a> DoubleEndedIterator for IntArrayViewIter<'a> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.chunks.next_back().map(|chunk| self.int_type.parse_raw(chunk))
+        self.chunks
+            .next_back()
+            .map(|chunk| self.int_type.parse_raw(chunk))
     }
 }
 
@@ -188,7 +206,12 @@ impl<'a> FloatArrayView<'a> {
     pub fn at(&self, index: usize) -> f32 {
         let start = 4 * index;
         let end = start + 4;
-        assert!(end <= self.raw.len(), "Index out of bounds: index {}, len {}", index, self.len());
+        assert!(
+            end <= self.raw.len(),
+            "Index out of bounds: index {}, len {}",
+            index,
+            self.len()
+        );
         parse_float(&self.raw[start..end])
     }
 
@@ -230,7 +253,6 @@ impl<'a> DoubleEndedIterator for FloatArrayViewIter<'a> {
 impl<'a> ExactSizeIterator for FloatArrayViewIter<'a> {}
 impl<'a> std::iter::FusedIterator for FloatArrayViewIter<'a> {}
 
-
 /// Enum with all possible tag values.
 ///
 /// # Variants
@@ -270,9 +292,7 @@ impl<'a> TagValue<'a> {
             b'B' => {
                 let arr_ty = raw_tag[0];
                 if arr_ty == b'f' {
-                    return FloatArray(FloatArrayView {
-                        raw: &raw_tag[5..],
-                    });
+                    return FloatArray(FloatArrayView { raw: &raw_tag[5..] });
                 }
                 if let Some(int_type) = IntegerType::from_letter(arr_ty) {
                     return IntArray(IntArrayView {
@@ -296,21 +316,21 @@ impl<'a> TagValue<'a> {
             String(u8_slice, str_type) => {
                 f.write_all(&[str_type.letter(), b':'])?;
                 f.write_all(u8_slice)
-            },
+            }
             IntArray(arr_view) => {
                 f.write_all(b"B:i")?;
                 for value in arr_view.iter() {
                     write!(f, ",{}", value)?;
                 }
                 Ok(())
-            },
+            }
             FloatArray(arr_view) => {
                 f.write_all(b"B:f")?;
                 for value in arr_view.iter() {
                     write!(f, ",{}", value)?;
                 }
                 Ok(())
-            },
+            }
         }
     }
 }
@@ -333,7 +353,7 @@ macro_rules! push_num {
             raw.$write_fun::<LittleEndian>(value).unwrap();
             1 + mem::size_of::<$type>()
         }
-    }
+    };
 }
 
 #[inline]
@@ -350,19 +370,19 @@ fn push_u8(value: u8, raw: &mut Vec<u8>) -> usize {
     2
 }
 
-push_num!{
+push_num! {
     push_i16(i16) { write_i16(b's') }
 }
 
-push_num!{
+push_num! {
     push_u16(u16) { write_u16(b'S') }
 }
 
-push_num!{
+push_num! {
     push_i32(i32) { write_i32(b'i') }
 }
 
-push_num!{
+push_num! {
     push_u32(u32) { write_u32(b'I') }
 }
 
@@ -376,7 +396,11 @@ impl PushNum for i8 {
         raw.push(b'c');
         raw.write_i32::<LittleEndian>(arr.len() as i32).unwrap();
         unsafe {
-            raw.write_all(std::slice::from_raw_parts(arr.as_ptr() as *const u8, arr.len())).unwrap();
+            raw.write_all(std::slice::from_raw_parts(
+                arr.as_ptr() as *const u8,
+                arr.len(),
+            ))
+            .unwrap();
         }
         6 + arr.len()
     }
@@ -407,7 +431,7 @@ macro_rules! push_num_array {
             }
             6 + arr.len() * mem::size_of::<Self>()
         }
-    }
+    };
 }
 
 impl PushNum for i16 {
@@ -525,7 +549,10 @@ fn tag_type_size(ty: u8) -> io::Result<u32> {
         b'c' | b'C' | b'A' => Ok(1),
         b's' | b'S' => Ok(2),
         b'i' | b'I' | b'f' => Ok(4),
-        _ => Err(io::Error::new(InvalidData, format!("Corrupted record: Unexpected tag type: {}", ty as char))),
+        _ => Err(io::Error::new(
+            InvalidData,
+            format!("Corrupted record: Unexpected tag type: {}", ty as char),
+        )),
     }
 }
 
@@ -534,7 +561,10 @@ fn tag_type_size(ty: u8) -> io::Result<u32> {
 /// For example, the function would return 7 for the raw representation of `"AA:i:10    BB:i:20"`.
 fn get_length(raw_tags: &[u8]) -> io::Result<u32> {
     if raw_tags.len() < 4 {
-        return Err(io::Error::new(InvalidData, "Corrupted record: Truncated tags"));
+        return Err(io::Error::new(
+            InvalidData,
+            "Corrupted record: Truncated tags",
+        ));
     }
     let ty = raw_tags[2];
     match ty {
@@ -542,20 +572,29 @@ fn get_length(raw_tags: &[u8]) -> io::Result<u32> {
             for i in 3..raw_tags.len() {
                 if raw_tags[i] == 0 {
                     if ty == b'H' && i % 2 != 0 {
-                        return Err(io::Error::new(InvalidData, "Corrupted record: Hex tag has an odd number of bytes"));
+                        return Err(io::Error::new(
+                            InvalidData,
+                            "Corrupted record: Hex tag has an odd number of bytes",
+                        ));
                     }
                     return Ok(1 + i as u32);
                 }
             }
-            Err(io::Error::new(InvalidData, "Corrupted record: Truncated tags"))
-        },
+            Err(io::Error::new(
+                InvalidData,
+                "Corrupted record: Truncated tags",
+            ))
+        }
         b'B' => {
             if raw_tags.len() < 8 {
-                return Err(io::Error::new(InvalidData, "Corrupted record: Truncated tags"));
+                return Err(io::Error::new(
+                    InvalidData,
+                    "Corrupted record: Truncated tags",
+                ));
             }
             let arr_len = (&raw_tags[4..8]).read_i32::<LittleEndian>()? as u32;
             Ok(8 + tag_type_size(raw_tags[3])? * arr_len)
-        },
+        }
         _ => Ok(3 + tag_type_size(raw_tags[2])?),
     }
 }
@@ -590,7 +629,10 @@ impl TagViewer {
             sum_len += tag_len as usize;
         }
         if sum_len > self.raw.len() {
-            Err(io::Error::new(InvalidData, "Corrupted record: Truncated tags"))
+            Err(io::Error::new(
+                InvalidData,
+                "Corrupted record: Truncated tags",
+            ))
         } else {
             Ok(())
         }
@@ -609,8 +651,10 @@ impl TagViewer {
         for &tag_len in self.lengths.iter() {
             let tag_len = tag_len as usize;
             if name == &self.raw[start..start + 2] {
-                return Some(TagValue::from_raw(self.raw[start + 2],
-                    &self.raw[start + 3..start + tag_len]));
+                return Some(TagValue::from_raw(
+                    self.raw[start + 2],
+                    &self.raw[start + 3..start + tag_len],
+                ));
             }
             start += tag_len;
         }
@@ -643,7 +687,8 @@ impl TagViewer {
     pub fn push_num<V: PushNum>(&mut self, name: &TagName, value: V) {
         self.raw.push(name[0]);
         self.raw.push(name[1]);
-        self.lengths.push(2 + value.push_individually(&mut self.raw) as u32);
+        self.lengths
+            .push(2 + value.push_individually(&mut self.raw) as u32);
     }
 
     /// Adds a tag with numeric array (accepts slices of types `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `f32`).
@@ -654,7 +699,8 @@ impl TagViewer {
     pub fn push_array<V: PushNum>(&mut self, name: &TagName, array: &[V]) {
         self.raw.push(name[0]);
         self.raw.push(name[1]);
-        self.lengths.push(2 + V::push_array(array, &mut self.raw) as u32);
+        self.lengths
+            .push(2 + V::push_array(array, &mut self.raw) as u32);
     }
 
     /// Adds a tag with string value.
@@ -662,8 +708,12 @@ impl TagViewer {
     ///
     /// Panics if the string contains null symbol.
     pub fn push_string(&mut self, name: &TagName, string: &[u8]) {
-        assert!(string.iter().all(|ch| *ch != 0),
-            "Cannot push tag {}{}: String value contains null symbol.", name[0] as char, name[1] as char);
+        assert!(
+            string.iter().all(|ch| *ch != 0),
+            "Cannot push tag {}{}: String value contains null symbol.",
+            name[0] as char,
+            name[1] as char
+        );
 
         self.raw.push(name[0]);
         self.raw.push(name[1]);
@@ -678,10 +728,18 @@ impl TagViewer {
     ///
     /// Panics if the `hex` contains null symbol or has odd number of symbols.
     pub fn push_hex(&mut self, name: &TagName, hex: &[u8]) {
-        assert!(hex.len() % 2 == 0,
-            "Cannot push tag {}{}: Hex value has an odd number of symbols", name[0] as char, name[1] as char);
-        assert!(hex.iter().all(|ch| *ch != 0),
-            "Cannot push tag {}{}: Hex value contains null symbol.", name[0] as char, name[1] as char);
+        assert!(
+            hex.len() % 2 == 0,
+            "Cannot push tag {}{}: Hex value has an odd number of symbols",
+            name[0] as char,
+            name[1] as char
+        );
+        assert!(
+            hex.iter().all(|ch| *ch != 0),
+            "Cannot push tag {}{}: Hex value contains null symbol.",
+            name[0] as char,
+            name[1] as char
+        );
 
         self.raw.push(name[0]);
         self.raw.push(name[1]);
@@ -697,7 +755,10 @@ impl TagViewer {
         if self.inner_push_sam(tag) {
             Ok(())
         } else {
-            Err(io::Error::new(InvalidData, format!("Cannot parse tag '{}'", tag)))
+            Err(io::Error::new(
+                InvalidData,
+                format!("Cannot parse tag '{}'", tag),
+            ))
         }
     }
 
@@ -735,20 +796,41 @@ impl TagViewer {
         };
 
         match arr_type {
-            "c" => split.map(|s| s.parse::<i8>()).collect::<Result<Vec<_>, _>>()
-                .map(|values| self.push_array(name, &values)).is_ok(),
-            "C" => split.map(|s| s.parse::<u8>()).collect::<Result<Vec<_>, _>>()
-                .map(|values| self.push_array(name, &values)).is_ok(),
-            "s" => split.map(|s| s.parse::<i16>()).collect::<Result<Vec<_>, _>>()
-                .map(|values| self.push_array(name, &values)).is_ok(),
-            "S" => split.map(|s| s.parse::<u16>()).collect::<Result<Vec<_>, _>>()
-                .map(|values| self.push_array(name, &values)).is_ok(),
-            "i" => split.map(|s| s.parse::<i32>()).collect::<Result<Vec<_>, _>>()
-                .map(|values| self.push_array(name, &values)).is_ok(),
-            "I" => split.map(|s| s.parse::<u32>()).collect::<Result<Vec<_>, _>>()
-                .map(|values| self.push_array(name, &values)).is_ok(),
-            "f" => split.map(|s| s.parse::<f32>()).collect::<Result<Vec<_>, _>>()
-                .map(|values| self.push_array(name, &values)).is_ok(),
+            "c" => split
+                .map(|s| s.parse::<i8>())
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| self.push_array(name, &values))
+                .is_ok(),
+            "C" => split
+                .map(|s| s.parse::<u8>())
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| self.push_array(name, &values))
+                .is_ok(),
+            "s" => split
+                .map(|s| s.parse::<i16>())
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| self.push_array(name, &values))
+                .is_ok(),
+            "S" => split
+                .map(|s| s.parse::<u16>())
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| self.push_array(name, &values))
+                .is_ok(),
+            "i" => split
+                .map(|s| s.parse::<i32>())
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| self.push_array(name, &values))
+                .is_ok(),
+            "I" => split
+                .map(|s| s.parse::<u32>())
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| self.push_array(name, &values))
+                .is_ok(),
+            "f" => split
+                .map(|s| s.parse::<f32>())
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| self.push_array(name, &values))
+                .is_ok(),
             _ => false,
         }
     }
@@ -771,7 +853,7 @@ impl TagViewer {
                     return false;
                 }
                 self.push_char(tag_name, tag_bytes[5])
-            },
+            }
             b'i' => {
                 let number: i64 = match tag_value.parse() {
                     Ok(value) => value,
@@ -784,14 +866,14 @@ impl TagViewer {
                 } else {
                     return false;
                 }
-            },
+            }
             b'f' => {
                 let float: f32 = match tag_value.parse() {
                     Ok(value) => value,
                     Err(_) => return false,
                 };
                 self.push_num(tag_name, float)
-            },
+            }
             b'Z' => self.push_string(tag_name, tag_value.as_bytes()),
             b'H' => self.push_hex(tag_name, tag_value.as_bytes()),
             b'B' => return self.push_sam_array(tag_name, tag_value),
@@ -829,9 +911,11 @@ impl<'a> Iterator for TagIter<'a> {
                 let start = self.pos;
                 self.pos += tag_len;
                 let name = [self.raw[start], self.raw[start + 1]];
-                Some((name, TagValue::from_raw(self.raw[start + 2],
-                        &self.raw[start + 3..start + tag_len])))
-            },
+                Some((
+                    name,
+                    TagValue::from_raw(self.raw[start + 2], &self.raw[start + 3..start + tag_len]),
+                ))
+            }
             None => None,
         }
     }

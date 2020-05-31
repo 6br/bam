@@ -20,7 +20,7 @@ use index::Chunk;
 /// and then use [read_into](../trait.RecordReader.html#method.read_into) instead of iterating,
 /// as it saves time on allocation.
 pub struct RegionViewer<'a, R: Read + Seek> {
-    parent: &'a mut IndexedReader<R>,
+    pub parent: &'a mut IndexedReader<R>,
     start: i32,
     end: i32,
     predicate: Box<dyn Fn(&record::Record) -> bool>,
@@ -363,7 +363,7 @@ impl Region {
 /// ```
 /// You can also ignore the error completely: `.modification_time(ModificationTime::Ignore)`.
 pub struct IndexedReader<R: Read + Seek> {
-    reader: bgzip::SeekReader<R>,
+    pub reader: bgzip::SeekReader<R>,
     header: Header,
     index: Index,
 }

@@ -1,15 +1,15 @@
 //! Indexed and consecutive BAM readers.
 
 use std::fs::File;
-use std::io::{Read, Seek, Result, Error};
 use std::io::ErrorKind::{InvalidData, InvalidInput};
+use std::io::{Error, Read, Result, Seek};
 use std::path::{Path, PathBuf};
 
-use super::index::{self, Index};
-use super::record;
 use super::bgzip::{self, ReadBgzip};
 use super::bgzip::{Block, BlockError};
 use super::header::Header;
+use super::index::{self, Index};
+use super::record;
 use super::RecordReader;
 use index::Chunk;
 
@@ -57,7 +57,10 @@ impl<'a, R: Read + Seek> RecordReader for RegionViewer<'a, R> {
             let record_bin = record.calculate_bin();
             if record_bin as u32 > index::MAX_BIN {
                 record.clear();
-                return Err(Error::new(InvalidData, "Read has BAI bin bigger than max possible value"));
+                return Err(Error::new(
+                    InvalidData,
+                    "Read has BAI bin bigger than max possible value",
+                ));
             }
             let (min_start, max_end) = index::bin_to_region(record_bin.into());
             if min_start >= self.start && max_end <= self.end {
@@ -67,7 +70,10 @@ impl<'a, R: Read + Seek> RecordReader for RegionViewer<'a, R> {
             let record_end = record.calculate_end();
             if record.flag().is_mapped() && record_end < record.start() {
                 record.clear();
-                return Err(Error::new(InvalidData, "Corrupted record: aln_end < aln_start"));
+                return Err(Error::new(
+                    InvalidData,
+                    "Corrupted record: aln_end < aln_start",
+                ));
             }
             if record.flag().is_mapped() {
                 if record_end > self.start {
@@ -114,8 +120,14 @@ pub enum ModificationTime {
 
 impl ModificationTime {
     fn check<T: AsRef<Path>, U: AsRef<Path>>(&self, bam_path: T, bai_path: U) -> Result<()> {
-        let bam_modified = bam_path.as_ref().metadata().and_then(|metadata| metadata.modified());
-        let bai_modified = bai_path.as_ref().metadata().and_then(|metadata| metadata.modified());
+        let bam_modified = bam_path
+            .as_ref()
+            .metadata()
+            .and_then(|metadata| metadata.modified());
+        let bai_modified = bai_path
+            .as_ref()
+            .metadata()
+            .and_then(|metadata| metadata.modified());
         let bam_younger = match (bam_modified, bai_modified) {
             (Ok(bam_time), Ok(bai_time)) => bai_time < bam_time,
             _ => false, // Modification time not available.
@@ -125,11 +137,16 @@ impl ModificationTime {
         }
 
         match &self {
-            ModificationTime::Ignore => {},
-            ModificationTime::Error => return Err(Error::new(InvalidInput,
-                "the BAM file is younger than the BAI index")),
-            ModificationTime::Warn(box_fun) =>
-                box_fun("the BAM file is younger than the BAI index"),
+            ModificationTime::Ignore => {}
+            ModificationTime::Error => {
+                return Err(Error::new(
+                    InvalidInput,
+                    "the BAM file is younger than the BAI index",
+                ))
+            }
+            ModificationTime::Warn(box_fun) => {
+                box_fun("the BAM file is younger than the BAI index")
+            }
         }
         Ok(())
     }
@@ -192,7 +209,10 @@ impl IndexedReaderBuilder {
     /// If BAI path was not specified, the functions tries to open `{bam_path}.bai`.
     pub fn from_path<P: AsRef<Path>>(&self, bam_path: P) -> Result<IndexedReader<File>> {
         let bam_path = bam_path.as_ref();
-        let bai_path = self.bai_path.as_ref().map(PathBuf::clone)
+        let bai_path = self
+            .bai_path
+            .as_ref()
+            .map(PathBuf::clone)
             .unwrap_or_else(|| PathBuf::from(format!("{}.bai", bam_path.display())));
         self.modification_time.check(&bam_path, &bai_path)?;
 
@@ -207,8 +227,11 @@ impl IndexedReaderBuilder {
     /// Creates a new [IndexedReader](struct.IndexedReader.html) from two streams.
     /// BAM stream should support random access, while BAI stream does not need to.
     /// `check_time` and `bai_path` values are ignored.
-    pub fn from_streams<R: Read + Seek, T: Read>(&self, bam_stream: R, bai_stream: T)
-            -> Result<IndexedReader<R>> {
+    pub fn from_streams<R: Read + Seek, T: Read>(
+        &self,
+        bam_stream: R,
+        bai_stream: T,
+    ) -> Result<IndexedReader<R>> {
         let reader = bgzip::SeekReader::from_stream(bam_stream, self.additional_threads)
             .map_err(|e| Error::new(e.kind(), format!("Failed to read BAM stream: {}", e)))?;
 
@@ -230,7 +253,12 @@ pub struct Region {
 impl Region {
     /// Creates new region. `ref_id` is 0-based, `start-end` is 0-based half-open interval.
     pub fn new(ref_id: u32, start: u32, end: u32) -> Region {
-        assert!(start <= end, "Region: start should not be greater than end ({} > {})", start, end);
+        assert!(
+            start <= end,
+            "Region: start should not be greater than end ({} > {})",
+            start,
+            end
+        );
         Region { ref_id, start, end }
     }
 
@@ -255,12 +283,22 @@ impl Region {
     }
 
     pub fn set_start(&mut self, start: u32) {
-        assert!(start <= self.end, "Region: start should not be greater than end ({} > {})", start, self.end);
+        assert!(
+            start <= self.end,
+            "Region: start should not be greater than end ({} > {})",
+            start,
+            self.end
+        );
         self.start = start;
     }
 
     pub fn set_end(&mut self, end: u32) {
-        assert!(self.start <= end, "Region: start should not be greater than end ({} > {})", self.start, end);
+        assert!(
+            self.start <= end,
+            "Region: start should not be greater than end ({} > {})",
+            self.start,
+            end
+        );
         self.end = end;
     }
 
@@ -386,7 +424,11 @@ impl<R: Read + Seek> IndexedReader<R> {
     fn new(mut reader: bgzip::SeekReader<R>, index: Index) -> Result<Self> {
         reader.make_consecutive();
         let header = Header::from_bam(&mut reader)?;
-        Ok(Self { reader, header, index })
+        Ok(Self {
+            reader,
+            header,
+            index,
+        })
     }
 
     /// Returns an iterator over records aligned to the [reference region](struct.Region.html).
@@ -399,18 +441,40 @@ impl<R: Read + Seek> IndexedReader<R> {
     /// Records will be filtered by `predicate`. It helps to slightly reduce fetching time,
     /// as some records will be removed without allocating new memory and without calculating
     /// alignment length.
-    pub fn fetch_by<'a, F>(&'a mut self, region: &Region, predicate: F) -> Result<RegionViewer<'a, R>>
-    where F: 'static + Fn(&record::Record) -> bool
+    pub fn fetch_by<'a, F>(
+        &'a mut self,
+        region: &Region,
+        predicate: F,
+    ) -> Result<RegionViewer<'a, R>>
+    where
+        F: 'static + Fn(&record::Record) -> bool,
     {
         match self.header.reference_len(region.ref_id()) {
-            None => return Err(Error::new(InvalidInput,
-                format!("Failed to fetch records: out of bounds reference {}", region.ref_id()))),
-            Some(len) if len < region.end() => return Err(Error::new(InvalidInput,
-                format!("Failed to fetch records: end > reference length ({} > {})", region.end(), len))),
-            _ => {},
+            None => {
+                return Err(Error::new(
+                    InvalidInput,
+                    format!(
+                        "Failed to fetch records: out of bounds reference {}",
+                        region.ref_id()
+                    ),
+                ))
+            }
+            Some(len) if len < region.end() => {
+                return Err(Error::new(
+                    InvalidInput,
+                    format!(
+                        "Failed to fetch records: end > reference length ({} > {})",
+                        region.end(),
+                        len
+                    ),
+                ))
+            }
+            _ => {}
         }
 
-        let chunks = self.index.fetch_chunks(region.ref_id(), region.start() as i32, region.end() as i32);
+        let chunks =
+            self.index
+                .fetch_chunks(region.ref_id(), region.start() as i32, region.end() as i32);
         self.reader.set_chunks(chunks);
         Ok(RegionViewer {
             parent: self,
@@ -429,10 +493,12 @@ impl<R: Read + Seek> IndexedReader<R> {
     ///
     /// Records will be filtered by `predicate`, which allows to skip some records without allocating new memory.
     pub fn full_by<'a, F>(&'a mut self, predicate: F) -> RegionViewer<'a, R>
-    where F: 'static + Fn(&record::Record) -> bool
+    where
+        F: 'static + Fn(&record::Record) -> bool,
     {
         if let Some(offset) = self.index.start_offset() {
-            self.reader.set_chunks(vec![index::Chunk::new(offset, index::VirtualOffset::MAX)]);
+            self.reader
+                .set_chunks(vec![index::Chunk::new(offset, index::VirtualOffset::MAX)]);
         }
         RegionViewer {
             parent: self,
@@ -451,7 +517,8 @@ impl<R: Read + Seek> IndexedReader<R> {
     ///
     /// Records will be filtered by `predicate`, which allows to skip some records without allocating new memory.
     pub fn chunk_by<'a, F>(&'a mut self, chunks: Vec<Chunk>, predicate: F) -> RegionViewer<'a, R>
-    where F: 'static + Fn(&record::Record) -> bool
+    where
+        F: 'static + Fn(&record::Record) -> bool,
     {
         self.reader.set_chunks(chunks);
         RegionViewer {
@@ -471,10 +538,12 @@ impl<R: Read + Seek> IndexedReader<R> {
     ///
     /// Records will be filtered by `predicate`, which allows to skip some records without allocating new memory.
     pub fn unmapped_by<'a, F>(&'a mut self, predicate: F) -> RegionViewer<'a, R>
-    where F: 'static + Fn(&record::Record) -> bool
+    where
+        F: 'static + Fn(&record::Record) -> bool,
     {
         if let Some(offset) = self.index.end_offset() {
-            self.reader.set_chunks(vec![index::Chunk::new(offset, index::VirtualOffset::MAX)]);
+            self.reader
+                .set_chunks(vec![index::Chunk::new(offset, index::VirtualOffset::MAX)]);
         }
         RegionViewer {
             parent: self,
@@ -567,18 +636,21 @@ impl<R: Read> BamReader<R> {
         Ok(Self { reader, header })
     }
 
-    pub fn from_stream_no_header(stream: R, header: Header, additional_threads: u16) -> Result<Self> {
+    pub fn from_stream_no_header(
+        stream: R,
+        header: Header,
+        additional_threads: u16,
+    ) -> Result<Self> {
         let reader = bgzip::ConsecutiveReader::from_stream(stream, additional_threads);
         Ok(Self { reader, header })
     }
-
 
     /// Returns [header](../header/struct.Header.html).
     pub fn header(&self) -> &Header {
         &self.header
     }
 
-    pub fn next(&mut self) -> std::result::Result<&Block, BlockError> { 
+    pub fn next(&mut self) -> std::result::Result<&Block, BlockError> {
         self.reader.next()
     }
 }

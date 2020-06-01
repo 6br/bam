@@ -144,7 +144,7 @@ impl<R: Read> ReadBlock for ConsecutiveReadBlock<R> {
     }
 }
 
-struct JumpingReadBlock<R: Read + Seek> {
+pub struct JumpingReadBlock<R: Read + Seek> {
     stream: R,
     offset: u64,
     chunks: Vec<Chunk>,
@@ -186,7 +186,7 @@ impl<R: Read + Seek> JumpingReadBlock<R> {
         self.started = false;
     }
 
-    fn next_offset(&mut self) -> Option<u64> {
+    pub fn next_offset(&mut self) -> Option<u64> {
         if self.index >= self.chunks.len() {
             return None;
         }
@@ -516,7 +516,7 @@ pub trait ReadBgzip {
 /// or read blocks using [ReadBgzip](trait.ReadBgzip.html).
 pub struct SeekReader<R: Read + Seek> {
     decompressor: Box<dyn DecompressBlock<JumpingReadBlock<R>>>,
-    reader: JumpingReadBlock<R>,
+    pub reader: JumpingReadBlock<R>,
     chunks_index: usize,
     started: bool,
     contents_offset: usize,

@@ -1,17 +1,14 @@
 //! Bgzip files (BGZF) writer.
 
-use std::sync::{Arc, Weak, Mutex};
-use std::sync::atomic::{
-    AtomicBool,
-    Ordering::Relaxed,
-};
+use std::cmp::min;
 use std::collections::VecDeque;
-use std::io::{self, Write, ErrorKind};
+use std::fs::File;
+use std::io::{self, ErrorKind, Write};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::{Arc, Mutex, Weak};
 use std::thread;
 use std::time::Duration;
-use std::fs::File;
-use std::path::Path;
-use std::cmp::min;
 
 use super::{Block, ObjectPool};
 use super::{SLEEP_TIME, TIMEOUT};
@@ -64,7 +61,7 @@ impl Worker {
                 }
             } else {
                 // Panic in another thread.
-                break
+                break;
             };
 
             let mut block = if let Some(value) = block {
@@ -95,9 +92,9 @@ impl Worker {
                         panic!("Task handler not found for worker {}", self.worker_id.0);
                     } else {
                         // Panic in another thread.
-                        break
+                        break;
                     };
-                },
+                }
                 res => res,
             };
 
@@ -111,7 +108,7 @@ impl Worker {
                 panic!("Task handler not found for worker {}", self.worker_id.0);
             } else {
                 // Panic in another thread.
-                break
+                break;
             };
         }
         self
@@ -148,7 +145,7 @@ impl SingleThread {
 impl<W: Write> CompressionQueue<W> for SingleThread {
     fn add_block_and_write(&mut self, mut block: Block, stream: &mut W) -> (Block, io::Result<()>) {
         match block.compress(self.compression) {
-            Ok(()) => {},
+            Ok(()) => {}
             Err(ref e) if e.kind() == ErrorKind::WriteZero => {
                 // Compressed size is too big.
                 block.reset_compression();
@@ -158,11 +155,11 @@ impl<W: Write> CompressionQueue<W> for SingleThread {
                     return (block, Err(e));
                 }
                 block = second_half;
-            },
+            }
             Err(e) => {
                 block.reset();
                 return (block, Err(e));
-            },
+            }
         }
 
         let res = block.dump(stream);
@@ -190,18 +187,20 @@ impl MultiThread {
         assert!(threads > 0);
         let working_queue = Arc::new(Mutex::new(WorkingQueue::default()));
         let finish = Arc::new(AtomicBool::new(false));
-        let worker_handles = (0..threads).map(|i| {
-            let worker = Worker {
-                worker_id: WorkerId(i),
-                working_queue: Arc::downgrade(&working_queue),
-                finish: Arc::clone(&finish),
-                compression,
-            };
-            thread::Builder::new()
-                .name(format!("bgzip_write{}", i + 1))
-                .spawn(|| worker.run())
-                .expect("Cannot create a thread")
-        }).collect();
+        let worker_handles = (0..threads)
+            .map(|i| {
+                let worker = Worker {
+                    worker_id: WorkerId(i),
+                    working_queue: Arc::downgrade(&working_queue),
+                    finish: Arc::clone(&finish),
+                    compression,
+                };
+                thread::Builder::new()
+                    .name(format!("bgzip_write{}", i + 1))
+                    .spawn(|| worker.run())
+                    .expect("Cannot create a thread")
+            })
+            .collect();
 
         Self {
             working_queue,
@@ -215,19 +214,28 @@ impl MultiThread {
         if !self.finish.load(Relaxed) {
             return;
         }
-        let workers = self.worker_handles.drain(..).map(|thread| thread.join())
+        let workers = self
+            .worker_handles
+            .drain(..)
+            .map(|thread| thread.join())
             .collect::<Result<Vec<Worker>, _>>()
             .unwrap_or_else(|e| panic!("Panic in one of the threads: {:?}", e));
         self.finish.store(false, Relaxed);
         for worker in workers {
-            self.worker_handles.push(thread::Builder::new()
-                .name(format!("bgzip_write{}", worker.worker_id.0 + 1))
-                .spawn(|| worker.run())
-                .expect("Cannot create a thread"));
+            self.worker_handles.push(
+                thread::Builder::new()
+                    .name(format!("bgzip_write{}", worker.worker_id.0 + 1))
+                    .spawn(|| worker.run())
+                    .expect("Cannot create a thread"),
+            );
         }
     }
 
-    fn write_compressed<W: Write>(&mut self, stream: &mut W, stop_if_not_ready: bool) -> io::Result<()> {
+    fn write_compressed<W: Write>(
+        &mut self,
+        stream: &mut W,
+        stop_if_not_ready: bool,
+    ) -> io::Result<()> {
         if self.finish.load(Relaxed) {
             self.restart_workers();
         }
@@ -242,7 +250,7 @@ impl MultiThread {
                         } else {
                             false
                         }
-                    },
+                    }
                     Some(Task::Ready(_, _)) => true,
                     None => {
                         if guard.blocks.is_empty() {
@@ -250,7 +258,7 @@ impl MultiThread {
                         } else {
                             false
                         }
-                    },
+                    }
                 };
 
                 if need_pop {
@@ -262,15 +270,20 @@ impl MultiThread {
                     None
                 }
             } else {
-                return Err(io::Error::new(ErrorKind::Other, "Panic in one of the threads"));
+                return Err(io::Error::new(
+                    ErrorKind::Other,
+                    "Panic in one of the threads",
+                ));
             };
 
             if queue_top.is_none() {
                 thread::sleep(SLEEP_TIME);
                 time_waited += SLEEP_TIME;
                 if time_waited > TIMEOUT {
-                    return Err(io::Error::new(ErrorKind::TimedOut,
-                        format!("Compression takes more than {:?}", TIMEOUT)));
+                    return Err(io::Error::new(
+                        ErrorKind::TimedOut,
+                        format!("Compression takes more than {:?}", TIMEOUT),
+                    ));
                 }
                 continue;
             }
@@ -291,7 +304,13 @@ impl<W: Write> CompressionQueue<W> for MultiThread {
         if let Ok(mut guard) = self.working_queue.lock() {
             guard.blocks.push_back(block);
         } else {
-            return (block, Err(io::Error::new(ErrorKind::Other, "Panic in one of the threads")));
+            return (
+                block,
+                Err(io::Error::new(
+                    ErrorKind::Other,
+                    "Panic in one of the threads",
+                )),
+            );
         };
 
         let res = self.write_compressed(stream, true);
@@ -373,9 +392,7 @@ struct Moveout<T> {
 
 impl<T> Moveout<T> {
     fn new(value: T) -> Self {
-        Self {
-            value: Some(value),
-        }
+        Self { value: Some(value) }
     }
 
     fn take(&mut self) -> T {
@@ -456,7 +473,8 @@ const MIN_BUFFER_SIZE: usize = MAX_BUFFER_SIZE - MAX_TAIL_SIZE;
 impl<W: Write> Writer<W> {
     fn new(stream: W, compressor: Box<dyn CompressionQueue<W>>) -> Self {
         Self {
-            stream, compressor,
+            stream,
+            compressor,
             block: Moveout::new(Block::new()),
             context_end: 0,
             buffer: vec![0; MAX_TAIL_SIZE],
@@ -520,7 +538,10 @@ impl<W: Write> Writer<W> {
         }
         self.was_error = true;
         unsafe {
-            std::mem::replace(&mut self.stream, std::mem::MaybeUninit::uninit().assume_init())
+            std::mem::replace(
+                &mut self.stream,
+                std::mem::MaybeUninit::uninit().assume_init(),
+            )
         }
     }
 }
@@ -537,7 +558,8 @@ impl<W: Write> Write for Writer<W> {
         }
 
         let buffer_size = if self.context_end >= MIN_BUFFER_SIZE {
-            self.block.split_contents(self.context_end, &mut self.buffer)
+            self.block
+                .split_contents(self.context_end, &mut self.buffer)
         } else {
             0
         };

@@ -6,9 +6,9 @@
 //! reference position,
 //! * [Pileup entry](struct.PileupEntry.html) - a single record that overlaps a certain reference position.
 
-use std::rc::Rc;
-use std::io;
 use std::cmp::min;
+use std::io;
+use std::rc::Rc;
 
 use super::{Record, RecordReader};
 
@@ -55,7 +55,10 @@ impl PileupEntry {
             }
             cigar_index += 1;
         };
-        assert!(cigar_index < record.cigar().len(), "CIGAR cannot contain only insertions");
+        assert!(
+            cigar_index < record.cigar().len(),
+            "CIGAR cannot contain only insertions"
+        );
         let aln_query_end = record.aligned_query_end();
 
         let mut res = PileupEntry {
@@ -107,7 +110,9 @@ impl PileupEntry {
 
         while self.cigar_remaining == 0 {
             self.cigar_index += 1;
-            if self.cigar_index == self.record.cigar().len() || self.query_start >= self.aln_query_end {
+            if self.cigar_index == self.record.cigar().len()
+                || self.query_start >= self.aln_query_end
+            {
                 return false;
             }
             let (len, op) = self.record.cigar().at(self.cigar_index);
@@ -141,13 +146,12 @@ impl PileupEntry {
         self.query_end
     }
 
-    
     /// Returns the size of the record sequence aligned to the [reference position](#method.ref_pos).
     /// (same as `query_end() - query_start()`).
     pub fn len(&self) -> u32 {
         self.query_end - self.query_start
     }
-    
+
     /// Returns the type of the region aligned to the [reference position](#method.ref_pos)
     /// (deletion, match or insertion).
     pub fn aln_type(&self) -> AlnType {
@@ -167,7 +171,11 @@ impl PileupEntry {
     /// if the sequence is present in the record.
     pub fn sequence(&self) -> Option<super::record::sequence::SubseqIter> {
         if self.record.sequence().available() {
-            Some(self.record.sequence().subseq(self.query_start as usize..self.query_end as usize))
+            Some(
+                self.record
+                    .sequence()
+                    .subseq(self.query_start as usize..self.query_end as usize),
+            )
         } else {
             None
         }
@@ -252,7 +260,10 @@ impl<'a, I: Iterator<Item = io::Result<Record>>> Pileup<'a, I> {
 
     /// Creates a pileup from an iterator over `io::Result<Record>`. Same as calling [new](#method.new),
     /// however the pileup will be constructed from records that pass the `read_filter`.
-    pub fn with_filter<F: 'static + Fn(&Record) -> bool>(record_iter: &'a mut I, read_filter: F) -> Self {
+    pub fn with_filter<F: 'static + Fn(&Record) -> bool>(
+        record_iter: &'a mut I,
+        read_filter: F,
+    ) -> Self {
         let mut res = Pileup {
             record_iter,
             read_filter: Box::new(read_filter),
@@ -287,18 +298,22 @@ impl<'a, I: Iterator<Item = io::Result<Record>>> Pileup<'a, I> {
                     let rec_ref_id = record.ref_id() as u32;
                     let rec_start = record.start() as u32;
                     if rec_ref_id < self.last_ref_id
-                            || (rec_ref_id == self.last_ref_id && rec_start < self.last_ref_pos) {
-                        self.error = Some(io::Error::new(io::ErrorKind::InvalidData, "Input file is unsorted"));
+                        || (rec_ref_id == self.last_ref_id && rec_start < self.last_ref_pos)
+                    {
+                        self.error = Some(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "Input file is unsorted",
+                        ));
                         self.last_ref_id = std::u32::MAX;
                     }
                     self.last_ref_id = rec_ref_id;
                     self.last_ref_pos = rec_start;
                     self.entries.push(PileupEntry::new(Rc::new(record)));
-                },
+                }
                 Some(Err(e)) => {
                     self.error = Some(e);
                     self.last_ref_id = std::u32::MAX;
-                },
+                }
             }
             return;
         }
@@ -317,7 +332,9 @@ impl<'a, R: RecordReader> Iterator for Pileup<'a, R> {
 
         let mut new_ref_id = std::u32::MAX;
         let mut new_ref_pos = std::u32::MAX;
-        while new_ref_id == std::u32::MAX && (!self.entries.is_empty() || self.last_ref_id < std::u32::MAX) {
+        while new_ref_id == std::u32::MAX
+            && (!self.entries.is_empty() || self.last_ref_id < std::u32::MAX)
+        {
             for entry in self.entries.iter() {
                 let rec_ref_id = entry.record.ref_id() as u32;
                 if rec_ref_id < new_ref_id {
@@ -330,7 +347,8 @@ impl<'a, R: RecordReader> Iterator for Pileup<'a, R> {
 
             while self.last_ref_id < std::u32::MAX
                     // new_ref_id == last_ref_id or new_ref_id == u32::MAX, same with pos.
-                    && self.last_ref_id <= new_ref_id && self.last_ref_pos <= new_ref_pos {
+                    && self.last_ref_id <= new_ref_id && self.last_ref_pos <= new_ref_pos
+            {
                 self.read_next();
             }
             if self.error.is_some() {
@@ -351,8 +369,10 @@ impl<'a, R: RecordReader> Iterator for Pileup<'a, R> {
                     self.entries.swap_remove(i);
                 }
             } else {
-                assert!(rec_ref_id > new_ref_id || entry.ref_pos > new_ref_pos,
-                    "Record is to the left of the new pileup position");
+                assert!(
+                    rec_ref_id > new_ref_id || entry.ref_pos > new_ref_pos,
+                    "Record is to the left of the new pileup position"
+                );
             }
         }
 
@@ -385,7 +405,9 @@ impl PileupColumn {
 
     /// Sort [pileup entries](struct.PileupEntry.html) by the start of the alignment, and then by the record names.
     pub fn sort(&mut self) {
-        self.entries.sort_by(|a, b| (a.record.start(), a.record.name()).cmp(&(b.record.start(), b.record.name())))
+        self.entries.sort_by(|a, b| {
+            (a.record.start(), a.record.name()).cmp(&(b.record.start(), b.record.name()))
+        })
     }
 
     /// Returns 0-based reference id.

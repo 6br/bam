@@ -374,6 +374,7 @@ impl<T: ReadBlock> DecompressBlock<T> for MultiThread {
                 }
                 Err(e) => {
                     self.blocks_pool.bring(block);
+                    //break;
                     return Err(e);
                 }
                 Ok(()) => {}

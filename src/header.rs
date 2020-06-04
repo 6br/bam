@@ -1,11 +1,11 @@
 //! SAM/BAM header.
 
-use std::io::{Write, Read, Result, Error};
-use std::io::ErrorKind::InvalidData;
-use std::string::String;
 use std::collections::{hash_map, HashMap};
+use std::io::ErrorKind::InvalidData;
+use std::io::{Error, Read, Result, Write};
+use std::string::String;
 
-use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 pub type TagName = [u8; 2];
 
@@ -21,7 +21,7 @@ impl Tag {
     pub fn new(name: &TagName, value: String) -> Tag {
         Tag {
             name: name.clone(),
-            value
+            value,
         }
     }
 
@@ -219,23 +219,30 @@ impl HeaderEntry {
         let split_line: Vec<_> = line.split('\t').collect();
         let entry_type = split_line[0].as_bytes();
         if entry_type.len() != 3 || entry_type[0] != b'@' {
-            return Err(Error::new(InvalidData,
-                format!("Invalid header tag: {}", split_line[0])));
+            return Err(Error::new(
+                InvalidData,
+                format!("Invalid header tag: {}", split_line[0]),
+            ));
         }
-        let entry_type = EntryType::from_name(&[entry_type[1], entry_type[2]])
-            .ok_or_else(|| Error::new(InvalidData,
-                format!("Invalid header tag: {}", split_line[0])))?;
+        let entry_type =
+            EntryType::from_name(&[entry_type[1], entry_type[2]]).ok_or_else(|| {
+                Error::new(
+                    InvalidData,
+                    format!("Invalid header tag: {}", split_line[0]),
+                )
+            })?;
         let mut res = HeaderEntry::new(entry_type);
 
         for i in 1..split_line.len() {
             let tag = split_line[i].as_bytes();
             if tag.len() < 3 || tag[2] != b':' {
-                return Err(Error::new(InvalidData,
-                    format!("Invalid header tag: {} in line '{}'", split_line[i], line)));
+                return Err(Error::new(
+                    InvalidData,
+                    format!("Invalid header tag: {} in line '{}'", split_line[i], line),
+                ));
             }
             // .expect(...) here as input is already &str.
-            let tag_value = String::from_utf8(tag[3..].to_vec())
-                .expect("Tag value not in UTF-8");
+            let tag_value = String::from_utf8(tag[3..].to_vec()).expect("Tag value not in UTF-8");
             res.push(&[tag[0], tag[1]], tag_value);
         }
         Ok(res)
@@ -283,17 +290,22 @@ impl Header {
     /// Returns an error if the same reference appears twice or @SQ line has an incorrect format.
     pub fn push_entry(&mut self, entry: HeaderEntry) -> std::result::Result<(), String> {
         if entry.entry_type() == EntryType::RefSequence {
-            let name = entry.get(b"SN")
-                .ok_or_else(|| "Header: @SQ entry does not have a SN tag".to_string())?.to_string();
-            let len: u32 = entry.get(b"LN")
+            let name = entry
+                .get(b"SN")
+                .ok_or_else(|| "Header: @SQ entry does not have a SN tag".to_string())?
+                .to_string();
+            let len: u32 = entry
+                .get(b"LN")
                 .ok_or_else(|| "Header: @SQ entry does not have a LN tag".to_string())?
-                .parse().map_err(|_| "Header: @SQ entry has a non-integer LN tag".to_string())?;
+                .parse()
+                .map_err(|_| "Header: @SQ entry has a non-integer LN tag".to_string())?;
             if len <= 0 {
                 return Err("Reference length must be positive".to_string());
             }
             match self.ref_ids.entry(name.clone()) {
-                hash_map::Entry::Occupied(_) =>
-                    return Err(format!("Reference {} appears twice in the reference", name)),
+                hash_map::Entry::Occupied(_) => {
+                    return Err(format!("Reference {} appears twice in the reference", name))
+                }
                 hash_map::Entry::Vacant(v) => v.insert(self.ref_names.len() as u32),
             };
             self.ref_names.push(name.clone());
@@ -311,9 +323,12 @@ impl Header {
     /// Pushes a lines to the header.
     pub fn push_line(&mut self, line: &str) -> Result<()> {
         if line.starts_with("@CO") {
-            let comment = line.splitn(2, '\t').skip(1).next()
-                .ok_or_else(|| Error::new(InvalidData,
-                    format!("Failed to parse comment line '{}'", line)))?;
+            let comment = line.splitn(2, '\t').skip(1).next().ok_or_else(|| {
+                Error::new(
+                    InvalidData,
+                    format!("Failed to parse comment line '{}'", line),
+                )
+            })?;
             self.push_comment(comment.to_string());
         } else {
             self.push_entry(HeaderEntry::parse_line(line)?)
@@ -330,7 +345,7 @@ impl Header {
                 HeaderLine::Comment(comment) => {
                     writer.write_all(b"@CO\t")?;
                     writer.write_all(comment.as_bytes())?;
-                },
+                }
             }
             writeln!(writer)?;
         }
@@ -341,7 +356,8 @@ impl Header {
     pub fn write_bam<W: Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[b'B', b'A', b'M', 1])?;
         let mut header_text = Vec::new();
-        self.write_text(&mut header_text).expect("Failed to write BAM text to a vector");
+        self.write_text(&mut header_text)
+            .expect("Failed to write BAM text to a vector");
         writer.write_i32::<LittleEndian>(header_text.len() as i32)?;
         writer.write_all(&header_text)?;
         writer.write_i32::<LittleEndian>(self.ref_names.len() as i32)?;
@@ -364,7 +380,10 @@ impl Header {
 
         let l_text = stream.read_i32::<LittleEndian>()?;
         if l_text < 0 {
-            return Err(Error::new(InvalidData, "BAM file corrupted: negative header length"));
+            return Err(Error::new(
+                InvalidData,
+                "BAM file corrupted: negative header length",
+            ));
         }
         let mut text = vec![0_u8; l_text as usize];
         stream.read_exact(&mut text)?;
@@ -382,8 +401,10 @@ impl Header {
 
         let n_refs = stream.read_i32::<LittleEndian>()?;
         if n_refs < 0 {
-            return Err(Error::new(InvalidData,
-                "BAM file corrupted: negative number of references"));
+            return Err(Error::new(
+                InvalidData,
+                "BAM file corrupted: negative number of references",
+            ));
         }
         let n_refs = n_refs as usize;
         let no_header_refs = header.ref_names.len() == 0;
@@ -396,24 +417,32 @@ impl Header {
         for i in 0..n_refs {
             let l_name = stream.read_i32::<LittleEndian>()?;
             if l_name <= 0 {
-                return Err(Error::new(InvalidData,
-                    "BAM file corrupted: negative reference name length"));
+                return Err(Error::new(
+                    InvalidData,
+                    "BAM file corrupted: negative reference name length",
+                ));
             }
             let mut name = vec![0_u8; l_name as usize - 1];
             stream.read_exact(&mut name)?;
             let _null = stream.read_u8()?;
-            let name = std::string::String::from_utf8(name)
-                .map_err(|_| Error::new(InvalidData,
-                    "BAM file corrupted: reference name not in UTF-8"))?;
+            let name = std::string::String::from_utf8(name).map_err(|_| {
+                Error::new(
+                    InvalidData,
+                    "BAM file corrupted: reference name not in UTF-8",
+                )
+            })?;
 
             let l_ref = stream.read_i32::<LittleEndian>()?;
             if l_ref < 0 {
-                return Err(Error::new(InvalidData,
-                    "BAM file corrupted: negative reference length"));
+                return Err(Error::new(
+                    InvalidData,
+                    "BAM file corrupted: negative reference length",
+                ));
             }
 
             if no_header_refs {
-                header.push_entry(HeaderEntry::ref_sequence(name, l_ref as u32))
+                header
+                    .push_entry(HeaderEntry::ref_sequence(name, l_ref as u32))
                     .map_err(|e| Error::new(InvalidData, e))?;
             } else if name != header.ref_names[i] || l_ref as u32 != header.ref_lengths[i] {
                 return Err(Error::new(InvalidData,

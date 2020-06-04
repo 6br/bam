@@ -1,18 +1,22 @@
-extern crate rand;
 extern crate bam;
+extern crate rand;
 
 use std::fs::File;
-use std::process::Command;
-use std::time::Instant;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::Instant;
 
-use rand::Rng;
 use glob::glob;
+use rand::Rng;
 
 use bam::{RecordReader, RecordWriter};
 
-fn compare_sam_files<P: AsRef<Path>, T: AsRef<Path>, W: Write>(filename1: P, filename2: T, log: &mut W) {
+fn compare_sam_files<P: AsRef<Path>, T: AsRef<Path>, W: Write>(
+    filename1: P,
+    filename2: T,
+    log: &mut W,
+) {
     let filename1 = filename1.as_ref();
     let filename2 = filename2.as_ref();
     let mut file1 = BufReader::new(File::open(&filename1).unwrap());
@@ -26,25 +30,43 @@ fn compare_sam_files<P: AsRef<Path>, T: AsRef<Path>, W: Write>(filename1: P, fil
         match (file1.read_line(&mut line1), file2.read_line(&mut line2)) {
             (Ok(x), Ok(y)) => {
                 if x == 0 && y != 0 {
-                    writeln!(log, "Comparing files {} and {}", filename1.display(), filename2.display()).unwrap();
+                    writeln!(
+                        log,
+                        "Comparing files {} and {}",
+                        filename1.display(),
+                        filename2.display()
+                    )
+                    .unwrap();
                     writeln!(log, "Samtools output: {}", line2.trim()).unwrap();
                     writeln!(log, "Samtools output is longer").unwrap();
                     panic!("Samtools output is longer");
                 } else if x != 0 && y == 0 {
-                    writeln!(log, "Comparing files {} and {}", filename1.display(), filename2.display()).unwrap();
+                    writeln!(
+                        log,
+                        "Comparing files {} and {}",
+                        filename1.display(),
+                        filename2.display()
+                    )
+                    .unwrap();
                     writeln!(log, "Crate output:    {}", line1.trim()).unwrap();
                     writeln!(log, "Crate output is longer").unwrap();
                     panic!("Crate output is longer");
                 } else if x == 0 && y == 0 {
                     break;
                 }
-            },
+            }
             (Ok(_), Err(e)) => panic!("Could not read samtools output: {:?}", e),
             (Err(e), Ok(_)) => panic!("Could not read crate output: {:?}", e),
             (Err(e1), Err(e2)) => panic!("Could not read both outputs: {:?}, {:?}", e1, e2),
         }
         if line1 != line2 {
-            writeln!(log, "Comparing files {} and {}", filename1.display(), filename2.display()).unwrap();
+            writeln!(
+                log,
+                "Comparing files {} and {}",
+                filename1.display(),
+                filename2.display()
+            )
+            .unwrap();
             writeln!(log, "Crate output:    {}", line1.trim()).unwrap();
             writeln!(log, "Samtools output: {}", line2.trim()).unwrap();
             writeln!(log, "Outputs do not match on line {}", i).unwrap();
@@ -56,15 +78,22 @@ fn compare_sam_files<P: AsRef<Path>, T: AsRef<Path>, W: Write>(filename1: P, fil
 fn test_indexed_reader<W: Write>(path: &str, additional_threads: u16, log: &mut W) {
     let mut reader = bam::IndexedReader::build()
         .additional_threads(additional_threads)
-        .from_path(path).unwrap();
+        .from_path(path)
+        .unwrap();
     let header = reader.header().clone();
 
     const ITERATIONS: usize = 100;
     let mut rng = rand::thread_rng();
     let mut record = bam::Record::new();
 
-    let output1 = format!("tests/data/tmp/bamcrate.ind_reader_t{}.sam", additional_threads);
-    let output2 = format!("tests/data/tmp/samtools.ind_reader_t{}.sam", additional_threads);
+    let output1 = format!(
+        "tests/data/tmp/bamcrate.ind_reader_t{}.sam",
+        additional_threads
+    );
+    let output2 = format!(
+        "tests/data/tmp/samtools.ind_reader_t{}.sam",
+        additional_threads
+    );
     let mut non_empty = 0;
     for i in 0..10 * ITERATIONS {
         if non_empty == ITERATIONS {
@@ -82,10 +111,12 @@ fn test_indexed_reader<W: Write>(path: &str, additional_threads: u16, log: &mut 
 
         let timer = Instant::now();
         let mut sam_writer = bam::SamWriter::from_path(&output1, header.clone()).unwrap();
-        let mut viewer = reader.fetch(&bam::Region::new(ref_id as u32, start, end)).unwrap();
+        let mut viewer = reader
+            .fetch(&bam::Region::new(ref_id as u32, start, end))
+            .unwrap();
         loop {
             match viewer.read_into(&mut record) {
-                Ok(true) => {},
+                Ok(true) => {}
                 Ok(false) => break,
                 Err(e) => panic!("{}", e),
             }
@@ -120,13 +151,19 @@ fn test_bam_reader<W: Write>(path: &str, additional_threads: u16, log: &mut W) {
     let mut record = bam::Record::new();
     let mut count = 0;
 
-    let output1 = format!("tests/data/tmp/bamcrate.bam_reader_t{}.sam", additional_threads);
-    let output2 = format!("tests/data/tmp/samtools.bam_reader_t{}.sam", additional_threads);
+    let output1 = format!(
+        "tests/data/tmp/bamcrate.bam_reader_t{}.sam",
+        additional_threads
+    );
+    let output2 = format!(
+        "tests/data/tmp/samtools.bam_reader_t{}.sam",
+        additional_threads
+    );
     let timer = Instant::now();
     let mut sam_writer = bam::SamWriter::from_path(&output1, reader.header().clone()).unwrap();
     loop {
         match reader.read_into(&mut record) {
-            Ok(true) => {},
+            Ok(true) => {}
             Ok(false) => break,
             Err(e) => panic!("{}", e),
         }
@@ -155,9 +192,18 @@ fn test_bam_to_bam<W: Write>(path: &str, additional_threads: u16, log: &mut W) {
     let mut record = bam::Record::new();
     let mut count = 0;
 
-    let bam_output = format!("tests/data/tmp/bamcrate.bam_to_bam_t{}.bam", additional_threads);
-    let output1 = format!("tests/data/tmp/bamcrate.bam_to_bam_t{}.sam", additional_threads);
-    let output2 = format!("tests/data/tmp/samtools.bam_to_bam_t{}.sam", additional_threads);
+    let bam_output = format!(
+        "tests/data/tmp/bamcrate.bam_to_bam_t{}.bam",
+        additional_threads
+    );
+    let output1 = format!(
+        "tests/data/tmp/bamcrate.bam_to_bam_t{}.sam",
+        additional_threads
+    );
+    let output2 = format!(
+        "tests/data/tmp/samtools.bam_to_bam_t{}.sam",
+        additional_threads
+    );
     let timer = Instant::now();
     let mut bam_writer = bam::BamWriter::build()
         .additional_threads(additional_threads)
@@ -165,7 +211,7 @@ fn test_bam_to_bam<W: Write>(path: &str, additional_threads: u16, log: &mut W) {
         .unwrap();
     loop {
         match reader.read_into(&mut record) {
-            Ok(true) => {},
+            Ok(true) => {}
             Ok(false) => break,
             Err(e) => panic!("{}", e),
         }
@@ -205,9 +251,18 @@ fn test_bam_to_bam_pause<W: Write>(path: &str, additional_threads: u16, log: &mu
     let mut record = bam::Record::new();
     let mut count = 0;
 
-    let bam_output = format!("tests/data/tmp/bamcrate.bam_to_bam_pause_t{}.bam", additional_threads);
-    let output1 = format!("tests/data/tmp/bamcrate.bam_to_bam_pause_t{}.sam", additional_threads);
-    let output2 = format!("tests/data/tmp/samtools.bam_to_bam_pause_t{}.sam", additional_threads);
+    let bam_output = format!(
+        "tests/data/tmp/bamcrate.bam_to_bam_pause_t{}.bam",
+        additional_threads
+    );
+    let output1 = format!(
+        "tests/data/tmp/bamcrate.bam_to_bam_pause_t{}.sam",
+        additional_threads
+    );
+    let output2 = format!(
+        "tests/data/tmp/samtools.bam_to_bam_pause_t{}.sam",
+        additional_threads
+    );
     let timer = Instant::now();
     let mut bam_writer = bam::BamWriter::build()
         .additional_threads(additional_threads)
@@ -215,7 +270,7 @@ fn test_bam_to_bam_pause<W: Write>(path: &str, additional_threads: u16, log: &mu
         .unwrap();
     for i in 1.. {
         match reader.read_into(&mut record) {
-            Ok(true) => {},
+            Ok(true) => {}
             Ok(false) => break,
             Err(e) => panic!("{}", e),
         }
@@ -257,16 +312,26 @@ fn test_bam_to_bam_pause<W: Write>(path: &str, additional_threads: u16, log: &mu
 fn test_ind_bam_to_bam<W: Write>(path: &str, additional_threads: u16, log: &mut W) {
     let mut reader = bam::IndexedReader::build()
         .additional_threads(additional_threads)
-        .from_path(path).unwrap();
+        .from_path(path)
+        .unwrap();
     let header = reader.header().clone();
 
     const ITERATIONS: usize = 100;
     let mut rng = rand::thread_rng();
     let mut record = bam::Record::new();
 
-    let bam_output = format!("tests/data/tmp/bamcrate.ind_bam_to_bam_t{}.bam", additional_threads);
-    let output1 = format!("tests/data/tmp/bamcrate.ind_bam_to_bam_t{}.sam", additional_threads);
-    let output2 = format!("tests/data/tmp/samtools.ind_bam_to_bam_t{}.sam", additional_threads);
+    let bam_output = format!(
+        "tests/data/tmp/bamcrate.ind_bam_to_bam_t{}.bam",
+        additional_threads
+    );
+    let output1 = format!(
+        "tests/data/tmp/bamcrate.ind_bam_to_bam_t{}.sam",
+        additional_threads
+    );
+    let output2 = format!(
+        "tests/data/tmp/samtools.ind_bam_to_bam_t{}.sam",
+        additional_threads
+    );
     let mut non_empty = 0;
     for i in 0..10 * ITERATIONS {
         if non_empty == ITERATIONS {
@@ -287,10 +352,12 @@ fn test_ind_bam_to_bam<W: Write>(path: &str, additional_threads: u16, log: &mut 
             .additional_threads(additional_threads)
             .from_path(&bam_output, reader.header().clone())
             .unwrap();
-        let mut viewer = reader.fetch(&bam::Region::new(ref_id as u32, start, end)).unwrap();
+        let mut viewer = reader
+            .fetch(&bam::Region::new(ref_id as u32, start, end))
+            .unwrap();
         loop {
             match viewer.read_into(&mut record) {
-                Ok(true) => {},
+                Ok(true) => {}
                 Ok(false) => break,
                 Err(e) => panic!("{}", e),
             }
@@ -314,11 +381,11 @@ fn test_ind_bam_to_bam<W: Write>(path: &str, additional_threads: u16, log: &mut 
         writeln!(log, "        total {} records", count).unwrap();
 
         let mut child = Command::new("samtools")
-        .args(&["view", "-h", "--no-PG"])
-        .arg(&bam_output)
-        .args(&["-o", &output1])
-        .spawn()
-        .expect("Failed to run samtools view");
+            .args(&["view", "-h", "--no-PG"])
+            .arg(&bam_output)
+            .args(&["-o", &output1])
+            .spawn()
+            .expect("Failed to run samtools view");
         let ecode = child.wait().expect("Failed to wait on samtools view");
         assert!(ecode.success());
 
@@ -340,7 +407,7 @@ fn test_sam_to_bam<W: Write>(path: &str, log: &mut W) {
     let mut bam_writer = bam::BamWriter::from_path(&bam_output, reader.header().clone()).unwrap();
     loop {
         match reader.read_into(&mut record) {
-            Ok(true) => {},
+            Ok(true) => {}
             Ok(false) => break,
             Err(e) => panic!("{}", e),
         }
@@ -366,18 +433,24 @@ fn test_sam_to_bam<W: Write>(path: &str, log: &mut W) {
 }
 
 fn sam_files() -> impl Iterator<Item = PathBuf> {
-    glob("tests/data/*.sam").unwrap().map(glob::GlobResult::unwrap)
+    glob("tests/data/*.sam")
+        .unwrap()
+        .map(glob::GlobResult::unwrap)
 }
 
 // Consecutive BAM reader: c_*.bam and b_*.bam
 // Indexed BAM reader:     i_*.bam and b_*.bam
 
 fn bam_files() -> impl Iterator<Item = PathBuf> {
-    glob("tests/data/[cb]_*.bam").unwrap().map(glob::GlobResult::unwrap)
+    glob("tests/data/[cb]_*.bam")
+        .unwrap()
+        .map(glob::GlobResult::unwrap)
 }
 
 fn indexed_bam_files() -> impl Iterator<Item = PathBuf> {
-    glob("tests/data/[ib]_*.bam").unwrap().map(glob::GlobResult::unwrap)
+    glob("tests/data/[ib]_*.bam")
+        .unwrap()
+        .map(glob::GlobResult::unwrap)
         .filter(|path| Path::new(&format!("{}.bai", path.display())).is_file())
 }
 

@@ -50,11 +50,11 @@
 //!
 //! ```rust
 //! extern crate bam;
-//! 
+//!
 //! use std::io;
 //! use bam::RecordWriter;
 //! use bam::header::{Header, HeaderEntry};
-//! 
+//!
 //! fn main() {
 //!     // Creating a header.
 //!     let mut header = Header::new();
@@ -64,11 +64,11 @@
 //!     header.push_entry(header_line).unwrap();
 //!     // Reference line       "@SQ  SN:chr1  LN:10000".
 //!     header.push_entry(HeaderEntry::ref_sequence("chr1".to_string(), 10000)).unwrap();
-//! 
+//!
 //!     // Write SAM to stdout.
 //!     let output = io::BufWriter::new(io::stdout());
 //!     let mut writer = bam::SamWriter::from_stream(output, header).unwrap();
-//! 
+//!
 //!     // Create a new record, set its name to "Read_1",
 //!     // reference id to 0, start to 10 (both 0-based).
 //!     let mut record = bam::Record::new();
@@ -82,14 +82,14 @@
 //!     record.set_cigar("2M1I1M".bytes()).unwrap();
 //!     // Add NM tag.
 //!     record.tags_mut().push_num(b"NM", 1);
-//! 
+//!
 //!     writer.write(&record).unwrap();
 //!     writer.finish().unwrap();
 //!     // Above code would print the following SAM file:
 //!     // @HD VN:1.6  SO:Coordinate
 //!     // @SQ SN:chr1 LN:10000
 //!     // Read_1  16  chr1    11  0   2M1I1M  *   0   0   ACGT    +5?+    NM:i:1
-//! 
+//!
 //!     println!("Aligned pairs:");
 //!     for (read_pos, ref_pos) in record.aligned_pairs() {
 //!         println!("    {:?} {:?}", read_pos, ref_pos);
@@ -106,25 +106,25 @@ extern crate byteorder;
 extern crate crc32fast;
 extern crate flate2;
 
-pub mod index;
-pub mod bgzip;
-pub mod record;
 pub mod bam_reader;
 pub mod bam_writer;
+pub mod bgzip;
 pub mod header;
-pub mod sam;
+pub mod index;
 pub mod pileup;
+pub mod record;
+pub mod sam;
 
-pub use bam_reader::IndexedReader;
 pub use bam_reader::BamReader;
+pub use bam_reader::IndexedReader;
 pub use bam_reader::Region;
 pub use bam_writer::BamWriter;
 
 pub use header::Header;
-pub use record::Record;
-pub use sam::SamWriter;
-pub use sam::SamReader;
 pub use pileup::Pileup;
+pub use record::Record;
+pub use sam::SamReader;
+pub use sam::SamWriter;
 
 use std::io;
 

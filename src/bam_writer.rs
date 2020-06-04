@@ -1,7 +1,7 @@
 //! BAM writer.
 
-use std::io::{Write, Result};
 use std::fs::File;
+use std::io::{Result, Write};
 use std::path::Path;
 
 use super::bgzip;
@@ -47,8 +47,11 @@ impl BamWriterBuilder {
     }
 
     /// Creates a BAM writer from a file and a header.
-    pub fn from_path<P: AsRef<Path>>(&mut self, path: P, header: Header)
-            -> Result<BamWriter<File>> {
+    pub fn from_path<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+        header: Header,
+    ) -> Result<BamWriter<File>> {
         let stream = File::create(path)?;
         self.from_stream(stream, header)
     }
@@ -103,7 +106,6 @@ impl<W: Write> BamWriter<W> {
     pub fn take_stream(self) -> W {
         self.writer.take_stream()
     }
-
 
     /// Pauses multi-thread writer until the next write operation. Does nothing to a single-thread writer.
     ///

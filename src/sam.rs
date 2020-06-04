@@ -12,11 +12,11 @@
 //! and the writer implements [RecordWriter](../trait.RecordWriter.html) trait. See them for
 //! more information.
 
-use std::io::{Write, BufWriter, Result, BufReader, BufRead};
 use std::fs::File;
+use std::io::{BufRead, BufReader, BufWriter, Result, Write};
 use std::path::Path;
 
-use super::{RecordReader, RecordWriter, Header, Record};
+use super::{Header, Record, RecordReader, RecordWriter};
 
 /// Builder of the [SamWriter](struct.SamWriter.html).
 pub struct SamWriterBuilder {
@@ -25,9 +25,7 @@ pub struct SamWriterBuilder {
 
 impl SamWriterBuilder {
     pub fn new() -> Self {
-        Self {
-            write_header: true,
-        }
+        Self { write_header: true }
     }
 
     /// The option to write or skip header when creating the SAM writer (writing by default).
@@ -37,8 +35,11 @@ impl SamWriterBuilder {
     }
 
     /// Creates a SAM writer from a file and a header.
-    pub fn from_path<P: AsRef<Path>>(&mut self, path: P, header: Header)
-            -> Result<SamWriter<BufWriter<File>>> {
+    pub fn from_path<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+        header: Header,
+    ) -> Result<SamWriter<BufWriter<File>>> {
         let stream = BufWriter::new(File::create(path)?);
         self.from_stream(stream, header)
     }
@@ -181,7 +182,11 @@ impl<R: BufRead> SamReader<R> {
                 break;
             }
         }
-        Ok(SamReader { stream, header, buffer })
+        Ok(SamReader {
+            stream,
+            header,
+            buffer,
+        })
     }
 
     /// Returns [header](../header/struct.Header.html).
@@ -205,7 +210,7 @@ impl<R: BufRead> RecordReader for SamReader<R> {
             Err(e) => {
                 record.clear();
                 Err(e)
-            },
+            }
         };
         self.buffer.clear();
         match self.stream.read_line(&mut self.buffer) {

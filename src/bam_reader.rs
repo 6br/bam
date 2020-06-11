@@ -2,7 +2,7 @@
 
 use std::fs::File;
 use std::io::ErrorKind::{InvalidData, InvalidInput};
-use std::io::{Error, Read, Result, Seek};
+use std::io::{Error, Read, Result, Seek, BufReader};
 use std::path::{Path, PathBuf};
 
 use super::bgzip::{self, ReadBgzip};
@@ -207,7 +207,7 @@ impl IndexedReaderBuilder {
 
     /// Creates a new [IndexedReader](struct.IndexedReader.html) from `bam_path`.
     /// If BAI path was not specified, the functions tries to open `{bam_path}.bai`.
-    pub fn from_path<P: AsRef<Path>>(&self, bam_path: P) -> Result<IndexedReader<File>> {
+    pub fn from_path<P: AsRef<Path>>(&self, bam_path: P) -> Result<IndexedReader<BufReader<File>>> {
         let bam_path = bam_path.as_ref();
         let bai_path = self
             .bai_path
@@ -216,7 +216,9 @@ impl IndexedReaderBuilder {
             .unwrap_or_else(|| PathBuf::from(format!("{}.bai", bam_path.display())));
         self.modification_time.check(&bam_path, &bai_path)?;
 
-        let reader = bgzip::SeekReader::from_path(bam_path, self.additional_threads)
+        let bam = BufReader::new(File::open(bam_path)?);
+
+        let reader = bgzip::SeekReader::from_stream(bam, self.additional_threads)
             .map_err(|e| Error::new(e.kind(), format!("Failed to open BAM file: {}", e)))?;
 
         let index = Index::from_path(bai_path)
@@ -406,7 +408,7 @@ pub struct IndexedReader<R: Read + Seek> {
     index: Index,
 }
 
-impl IndexedReader<File> {
+impl IndexedReader<BufReader<File>> {
     /// Creates [IndexedReaderBuilder](struct.IndexedReaderBuilder.html).
     pub fn build() -> IndexedReaderBuilder {
         IndexedReaderBuilder::new()

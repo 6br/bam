@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::fs::File;
 use std::io::ErrorKind::InvalidData;
-use std::io::{Error, Read, Result};
+use std::io::{Error, Read, Result, BufReader};
 use std::path::Path;
 use std::result;
 
@@ -359,7 +359,8 @@ impl Index {
     /// Loads index from path.
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Index> {
         let f = File::open(&path)?;
-        Index::from_stream(f)
+        let b = BufReader::new(f);
+        Index::from_stream(b)
     }
 
     /// Fetches [chunks](struct.Chunk.html) of the BAM file that contain all records for a given region.

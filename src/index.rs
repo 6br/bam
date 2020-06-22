@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::fs::File;
 use std::io::ErrorKind::InvalidData;
-use std::io::{Error, Read, Result, BufReader};
+use std::io::{BufReader, Error, Read, Result};
 use std::path::Path;
 use std::result;
 

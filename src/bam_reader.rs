@@ -2,7 +2,7 @@
 
 use std::fs::File;
 use std::io::ErrorKind::{InvalidData, InvalidInput};
-use std::io::{Error, Read, Result, Seek, BufReader};
+use std::io::{BufReader, Error, Read, Result, Seek};
 use std::path::{Path, PathBuf};
 
 use super::bgzip::{self, ReadBgzip};

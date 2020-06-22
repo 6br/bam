@@ -6,7 +6,8 @@ use std::io::{self, ErrorKind, Read, Write};
 use std::time::Duration;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use flate2::write::{DeflateDecoder, DeflateEncoder};
+use flate2::write::{DeflateEncoder};
+use libdeflater::{Decompressor};
 
 pub mod read;
 pub mod write;
@@ -397,47 +398,19 @@ impl Block {
             self.uncompressed.set_len(exp_uncompressed_size);
         }
         {
-            let mut decoder = DeflateDecoder::new(&mut self.uncompressed[..]);
-            match decoder.write_all(&self.compressed[..compressed_size - FOOTER_SIZE]) {
-                Ok(()) => {}
-                Err(ref e) if e.kind() == ErrorKind::WriteZero => {
-                    return Err(BlockError::Corrupted(format!(
-                        "Could not decompress block contents: \
-                    uncompressed size is bigger than expected {}",
-                        exp_uncompressed_size
-                    )))
-                }
+            let mut decoder = Decompressor::new();
+            // let mut decoder = DeflateDecoder::new(&mut self.uncompressed[..]);
+            match decoder.gzip_decompress(&self.compressed[..compressed_size - FOOTER_SIZE], &mut self.uncompressed[..]) {
+                Ok(_len) => {}
                 Err(e) => {
                     return Err(BlockError::Corrupted(format!(
                         "Could not decompress block contents: {:?}",
                         e
                     )))
                 }
-            }
-            let remaining_contents = match decoder.finish() {
-                Ok(remaining_buf) => remaining_buf.len(),
-                Err(ref e) if e.kind() == ErrorKind::WriteZero => {
-                    return Err(BlockError::Corrupted(format!(
-                        "Could not decompress block contents: \
-                    uncompressed size is bigger than expected {}",
-                        exp_uncompressed_size
-                    )))
-                }
-                Err(e) => {
-                    return Err(BlockError::Corrupted(format!(
-                        "Could not decompress block contents: {:?}",
-                        e
-                    )))
-                }
-            };
-            if remaining_contents != 0 {
-                return Err(BlockError::Corrupted(format!(
-                    "Uncompressed sizes do not match: expected {}, observed {}",
-                    exp_uncompressed_size,
-                    exp_uncompressed_size - remaining_contents
-                )));
             }
         }
+
 
         let exp_crc32 = self.crc32();
         let mut hasher = crc32fast::Hasher::new();

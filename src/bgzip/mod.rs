@@ -6,8 +6,8 @@ use std::io::{self, ErrorKind, Read, Write};
 use std::time::Duration;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use flate2::write::{DeflateEncoder};
-use libdeflater::{Decompressor};
+use flate2::write::DeflateEncoder;
+use libdeflater::Decompressor;
 
 pub mod read;
 pub mod write;
@@ -400,7 +400,10 @@ impl Block {
         {
             let mut decoder = Decompressor::new();
             // let mut decoder = DeflateDecoder::new(&mut self.uncompressed[..]);
-            match decoder.gzip_decompress(&self.compressed[..compressed_size - FOOTER_SIZE], &mut self.uncompressed[..]) {
+            match decoder.deflate_decompress(
+                &self.compressed[..compressed_size - FOOTER_SIZE],
+                &mut self.uncompressed[..],
+            ) {
                 Ok(_len) => {}
                 Err(e) => {
                     return Err(BlockError::Corrupted(format!(
@@ -410,7 +413,6 @@ impl Block {
                 }
             }
         }
-
 
         let exp_crc32 = self.crc32();
         let mut hasher = crc32fast::Hasher::new();

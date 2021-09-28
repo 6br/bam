@@ -486,6 +486,50 @@ impl<R: Read + Seek> IndexedReader<R> {
         })
     }
 
+    pub fn fetch_by_bin<'a, F>(
+        &'a mut self,
+        region: &Region,
+        bin_id: u32,
+        predicate: F,
+    ) -> Result<RegionViewer<'a, R>>
+    where
+        F: 'static + Fn(&record::Record) -> bool,
+    {
+        match self.header.reference_len(region.ref_id()) {
+            None => {
+                return Err(Error::new(
+                    InvalidInput,
+                    format!(
+                        "Failed to fetch records: out of bounds reference {}",
+                        region.ref_id()
+                    ),
+                ))
+            }
+            Some(len) if len < region.end() => {
+                return Err(Error::new(
+                    InvalidInput,
+                    format!(
+                        "Failed to fetch records: end > reference length ({} > {})",
+                        region.end(),
+                        len
+                    ),
+                ))
+            }
+            _ => {}
+        }
+
+        let chunks =
+            self.index
+                .fetch_by_bin(region.ref_id(), bin_id);
+        self.reader.set_chunks(chunks);
+        Ok(RegionViewer {
+            parent: self,
+            start: region.start() as i32,
+            end: region.end() as i32,
+            predicate: Box::new(predicate),
+        })
+    }
+
     /// Returns an iterator over all records from the start of the BAM file.
     pub fn full<'a>(&'a mut self) -> RegionViewer<'a, R> {
         self.full_by(|_| true)

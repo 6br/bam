@@ -364,6 +364,36 @@ impl Index {
     }
 
     /// Fetches [chunks](struct.Chunk.html) of the BAM file that contain all records for a given region.
+    pub fn fetch_by_bin(&self, ref_id: u32, bin_id: u32) -> Vec<Chunk> {
+        let mut chunks = Vec::new();
+        let ref_id = ref_id as usize;
+
+        if let Some(bin) = self.references[ref_id].bins.get(&bin_id) {
+            chunks.extend(
+                bin.chunks.iter()
+            );
+        }
+        let mut res = Vec::new();
+        if chunks.is_empty() {
+            return res;
+        }
+
+        chunks.sort();
+        let mut curr = chunks[0].clone();
+        for i in 1..chunks.len() {
+            if !curr.can_combine(&chunks[i]) {
+                res.push(curr);
+                curr = chunks[i].clone();
+            } else {
+                curr = curr.combine(&chunks[i]);
+            }
+        }
+        res.push(curr);
+        res
+    }
+    
+
+    /// Fetches [chunks](struct.Chunk.html) of the BAM file that contain all records for a given region.
     pub fn fetch_chunks(&self, ref_id: u32, start: i32, end: i32) -> Vec<Chunk> {
         let mut chunks = Vec::new();
         let ref_id = ref_id as usize;

@@ -144,7 +144,7 @@ impl<R: Read> ReadBlock for ConsecutiveReadBlock<R> {
     }
 }
 
-pub struct JumpingReadBlock<R: Read + Seek> {
+pub struct JumpingReadBlock<R: Read + Seek + Sync + Send> {
     stream: R,
     offset: u64,
     chunks: Vec<Chunk>,
@@ -152,7 +152,7 @@ pub struct JumpingReadBlock<R: Read + Seek> {
     started: bool,
 }
 
-impl<R: Read + Seek> JumpingReadBlock<R> {
+impl<R: Read + Seek + Sync + Send> JumpingReadBlock<R> {
     fn new(mut stream: R) -> io::Result<Self> {
         let offset = stream.seek(SeekFrom::Current(0))?;
         Ok(Self {
@@ -218,7 +218,7 @@ impl<R: Read + Seek> JumpingReadBlock<R> {
     }
 }
 
-impl<R: Read + Seek> ReadBlock for JumpingReadBlock<R> {
+impl<R: Read + Seek + Sync + Send> ReadBlock for JumpingReadBlock<R> {
     fn read_next(&mut self, block: &mut Block) -> Result<(), BlockError> {
         if let Some(new_offset) = self.next_offset() {
             if new_offset != self.offset {
@@ -515,7 +515,7 @@ pub trait ReadBgzip {
 ///
 /// You can read the contents using `io::Read`,
 /// or read blocks using [ReadBgzip](trait.ReadBgzip.html).
-pub struct SeekReader<R: Read + Seek> {
+pub struct SeekReader<R: Read + Seek + Sync + Send> {
     decompressor: Box<dyn DecompressBlock<JumpingReadBlock<R>>>,
     pub reader: JumpingReadBlock<R>,
     chunks_index: usize,
@@ -531,7 +531,7 @@ impl SeekReader<File> {
     }
 }
 
-impl<R: Read + Seek> SeekReader<R> {
+impl<R: Read + Seek + Sync + Send> SeekReader<R> {
     /// Opens a reader from a stream.
     pub fn from_stream(stream: R, additional_threads: u16) -> io::Result<Self> {
         let reader = JumpingReadBlock::new(stream)?;
@@ -591,7 +591,7 @@ impl<R: Read + Seek> SeekReader<R> {
     }
 }
 
-impl<R: Read + Seek> ReadBgzip for SeekReader<R> {
+impl<R: Read + Seek + Sync + Send> ReadBgzip for SeekReader<R> {
     /// Reads the next block in a queue. Note, that if the `chunks` vector contain the same block
     /// twice, it will be read only once.
     fn next(&mut self) -> Result<&Block, BlockError> {
@@ -616,7 +616,7 @@ impl<R: Read + Seek> ReadBgzip for SeekReader<R> {
     }
 }
 
-impl<R: Read + Seek> Read for SeekReader<R> {
+impl<R: Read + Seek + Sync + Send> Read for SeekReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if !self.started {
             match self.next() {

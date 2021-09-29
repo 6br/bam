@@ -19,14 +19,14 @@ use index::Chunk;
 /// If possible, create a single record using [Record::new](../record/struct.Record.html#method.new)
 /// and then use [read_into](../trait.RecordReader.html#method.read_into) instead of iterating,
 /// as it saves time on allocation.
-pub struct RegionViewer<'a, R: Read + Seek> {
+pub struct RegionViewer<'a, R: Read + Seek + Sync + Send> {
     pub parent: &'a mut IndexedReader<R>,
     start: i32,
     end: i32,
     predicate: Box<dyn Fn(&record::Record) -> bool>,
 }
 
-impl<'a, R: Read + Seek> RegionViewer<'a, R> {
+impl<'a, R: Read + Seek + Sync + Send> RegionViewer<'a, R> {
     /// Returns [header](../header/struct.Header.html).
     pub fn header(&self) -> &Header {
         self.parent.header()
@@ -38,7 +38,7 @@ impl<'a, R: Read + Seek> RegionViewer<'a, R> {
     }
 }
 
-impl<'a, R: Read + Seek> RecordReader for RegionViewer<'a, R> {
+impl<'a, R: Read + Seek + Sync + Send> RecordReader for RegionViewer<'a, R> {
     fn read_into(&mut self, record: &mut record::Record) -> Result<bool> {
         loop {
             let res = record.fill_from_bam(&mut self.parent.reader);
@@ -91,7 +91,7 @@ impl<'a, R: Read + Seek> RecordReader for RegionViewer<'a, R> {
 }
 
 /// Iterator over records.
-impl<'a, R: Read + Seek> Iterator for RegionViewer<'a, R> {
+impl<'a, R: Read + Seek + Sync + Send> Iterator for RegionViewer<'a, R> {
     type Item = Result<record::Record>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -229,7 +229,7 @@ impl IndexedReaderBuilder {
     /// Creates a new [IndexedReader](struct.IndexedReader.html) from two streams.
     /// BAM stream should support random access, while BAI stream does not need to.
     /// `check_time` and `bai_path` values are ignored.
-    pub fn from_streams<R: Read + Seek, T: Read>(
+    pub fn from_streams<R: Read + Seek + Send + Sync, T: Read>(
         &self,
         bam_stream: R,
         bai_stream: T,
@@ -402,7 +402,7 @@ impl Region {
 ///     .from_path("in.bam").unwrap();
 /// ```
 /// You can also ignore the error completely: `.modification_time(ModificationTime::Ignore)`.
-pub struct IndexedReader<R: Read + Seek> {
+pub struct IndexedReader<R: Read + Seek + Sync + Send> {
     pub reader: bgzip::SeekReader<R>,
     header: Header,
     index: Index,
@@ -422,7 +422,7 @@ impl IndexedReader<BufReader<File>> {
     }
 }
 
-impl<R: Read + Seek> IndexedReader<R> {
+impl<R: Read + Seek + Sync + Send> IndexedReader<R> {
     fn new(mut reader: bgzip::SeekReader<R>, index: Index) -> Result<Self> {
         reader.make_consecutive();
         let header = Header::from_bam(&mut reader)?;

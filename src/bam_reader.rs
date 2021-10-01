@@ -524,8 +524,8 @@ impl<R: Read + Seek> IndexedReader<R> {
         self.reader.set_chunks(chunks);
         Ok(RegionViewer {
             parent: self,
-            start: region.start() as i32,
-            end: region.end() as i32,
+            start: std::i32::MIN,
+            end: std::i32::MAX,
             predicate: Box::new(predicate),
         })
     }

@@ -391,7 +391,6 @@ impl Index {
         res.push(curr);
         res
     }
-    
 
     /// Fetches [chunks](struct.Chunk.html) of the BAM file that contain all records for a given region.
     pub fn fetch_chunks(&self, ref_id: u32, start: i32, end: i32) -> Vec<Chunk> {

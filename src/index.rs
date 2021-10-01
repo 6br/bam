@@ -364,14 +364,16 @@ impl Index {
     }
 
     /// Fetches [chunks](struct.Chunk.html) of the BAM file that contain all records for a given region.
-    pub fn fetch_by_bin(&self, ref_id: u32, bin_id: u32) -> Vec<Chunk> {
+    pub fn fetch_by_bins(&self, ref_id: u32, bin_ids: Vec<u32>) -> Vec<Chunk> {
         let mut chunks = Vec::new();
         let ref_id = ref_id as usize;
 
-        if let Some(bin) = self.references[ref_id].bins.get(&bin_id) {
-            chunks.extend(
-                bin.chunks.iter()
-            );
+        for bin_id in bin_ids {
+            if let Some(bin) = self.references[ref_id].bins.get(&bin_id) {
+                chunks.extend(
+                    bin.chunks.iter()
+                );
+            }
         }
         let mut res = Vec::new();
         if chunks.is_empty() {

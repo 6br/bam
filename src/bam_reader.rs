@@ -255,13 +255,11 @@ pub struct Region {
 impl Region {
     /// Creates new region. `ref_id` is 0-based, `start-end` is 0-based half-open interval.
     pub fn new(ref_id: u32, start: u32, end: u32) -> Region {
-        assert!(
-            start <= end,
-            "Region: start should not be greater than end ({} > {})",
-            start,
-            end
-        );
-        Region { ref_id, start, end }
+        if start > end {
+            Region { ref_id, end, start }
+        } else {
+            Region { ref_id, start, end }
+        }
     }
 
     pub fn ref_id(&self) -> u32 {

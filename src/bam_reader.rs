@@ -484,10 +484,11 @@ impl<R: Read + Seek> IndexedReader<R> {
         })
     }
 
-    pub fn fetch_by_bin<'a, F>(
+
+    pub fn fetch_by_bins<'a, F>(
         &'a mut self,
         region: &Region,
-        bin_id: u32,
+        bin_ids: Vec<u32>,
         predicate: F,
     ) -> Result<RegionViewer<'a, R>>
     where
@@ -518,12 +519,12 @@ impl<R: Read + Seek> IndexedReader<R> {
 
         let chunks =
             self.index
-                .fetch_by_bin(region.ref_id(), bin_id);
+                .fetch_by_bins(region.ref_id(), bin_ids);
         self.reader.set_chunks(chunks);
         Ok(RegionViewer {
             parent: self,
-            start: region.start() as i32,
-            end: region.end() as i32,
+            start: std::i32::MIN,
+            end: std::i32::MAX,
             predicate: Box::new(predicate),
         })
     }
